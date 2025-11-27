@@ -446,12 +446,14 @@ python demo/test_pipeline.py
 finnews-ai/
 ├── main.py                      # FastAPI application entry point
 ├── requirements.txt             # Python dependencies
+├── .env                         # Environment variables (DATABASE_URL, GEMINI_API_KEY)
 ├── .gitignore                   # Git ignore rules
 ├── README.md                    # This file
+├── alembic.ini                  # Alembic migration configuration
 │
 ├── api/                         # API layer
 │   └── routes/
-│       └── pipeline.py          # Pipeline endpoints
+│       └── pipeline.py          # Pipeline & LangGraph endpoints
 │
 ├── agents/                      # Multi-agent system
 │   ├── dedup/
@@ -460,8 +462,20 @@ finnews-ai/
 │   │   └── agent.py            # EntityAgent
 │   ├── sentiment/
 │   │   └── agent.py            # SentimentAgent
-│   └── query/
-│       └── agent.py            # QueryAgent
+│   ├── query/
+│   │   └── agent.py            # QueryAgent
+│   └── llm/
+│       └── agent.py            # LLMAgent (Google Gemini)
+│
+├── database/                    # PostgreSQL integration
+│   ├── db.py                   # Async database client
+│   ├── schema.py               # SQLAlchemy ORM models
+│   └── migrations/             # Alembic migration files
+│
+├── graphs/                      # LangGraph workflows
+│   ├── state.py                # Pydantic state models
+│   ├── pipeline_graph.py       # 6-node pipeline workflow
+│   └── query_graph.py          # 5-node query workflow
 │
 ├── ingest/
 │   └── demo_data.py            # 20+ demo financial articles
@@ -474,7 +488,11 @@ finnews-ai/
     ├── test_entity.py
     ├── test_sentiment.py
     ├── test_query.py
-    └── test_pipeline.py
+    ├── test_llm.py
+    ├── test_db.py
+    ├── test_pipeline.py
+    ├── test_pipeline_graph.py
+    └── test_query_graph.py
 ```
 
 ---
@@ -515,12 +533,137 @@ Results: 2 articles
 
 ---
 
+## 🔗 LangGraph Workflow Integration
+
+FinNews AI uses **LangGraph** to orchestrate multi-agent workflows with state management and visualization.
+
+### 📊 Pipeline Workflow (6 Nodes)
+
+![Pipeline Graph](pipeline_graph.png)
+
+The pipeline workflow executes agents sequentially with full state tracking:
+
+```
+START → Ingest → Dedup → Entities → Sentiment → LLM → Index → END
+```
+
+**Node Details:**
+1. **Ingest** - Load demo articles and save to PostgreSQL
+2. **Dedup** - Deduplicate using MPNet embeddings, save clusters
+3. **Entities** - Extract financial entities with spaCy NER
+4. **Sentiment** - Analyze sentiment with FinBERT, save to DB
+5. **LLM** - Generate summaries using Google Gemini (first 5 articles)
+6. **Index** - Store articles in ChromaDB for semantic search
+
+**API Endpoint:**
+```http
+POST /pipeline/run_graph
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "stats": {
+    "total_input": 20,
+    "unique_count": 19,
+    "clusters_count": 19,
+    "entities_extracted": 19,
+    "sentiment_analyzed": 19,
+    "llm_summaries": 5,
+    "indexed_count": 19
+  },
+  "sentiment_distribution": {
+    "positive": 12,
+    "negative": 3,
+    "neutral": 4
+  },
+  "timestamp": "2025-11-27T12:34:56.789Z"
+}
+```
+
+---
+
+### 🔍 Query Workflow (5 Nodes)
+
+![Query Graph](query_graph.png)
+
+The query workflow processes user queries with entity extraction and LLM expansion:
+
+```
+START → Parse Query → Expand Query → Semantic Search → Rerank → Format Response → END
+```
+
+**Node Details:**
+1. **Parse Query** - Extract entities (companies/sectors/regulators) using spaCy
+2. **Expand Query** - Use Google Gemini to enrich query with financial context
+3. **Semantic Search** - Query ChromaDB with expanded text, retrieve top 10
+4. **Rerank** - Boost results based on entity matches (company +0.1, regulator +0.15)
+5. **Format Response** - Structure output and save query log to PostgreSQL
+
+**API Endpoint:**
+```http
+POST /query_graph
+```
+
+**Request:**
+```json
+{
+  "query": "HDFC Bank dividend announcement"
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "query": "HDFC Bank dividend announcement",
+  "expanded_query": "Seeking detailed news on HDFC Bank Ltd. (NSE: HDFCBANK) dividend declaration including payout ratio, ex-dividend date, record date, and impact on shareholder returns...",
+  "matched_entities": {
+    "companies": ["HDFC Bank"],
+    "sectors": [],
+    "regulators": []
+  },
+  "results": [
+    {
+      "id": 1,
+      "text": "HDFC Bank announces 15% dividend payout...",
+      "rerank_score": 0.843,
+      "entities": {
+        "companies": ["HDFC Bank"],
+        "events": ["Dividend"]
+      },
+      "sentiment": {
+        "label": "positive",
+        "score": 0.9525
+      }
+    }
+  ],
+  "result_count": 2,
+  "timestamp": "2025-11-27T12:35:00.123Z"
+}
+```
+
+---
+
+### 🧪 Testing LangGraph Workflows
+
+```bash
+# Test pipeline workflow
+python demo/test_pipeline_graph.py
+
+# Test query workflow
+python demo/test_query_graph.py
+```
+
+---
+
 ## 🔮 Upcoming Enhancements
 
-- [ ] **PostgreSQL Integration** — Persistent storage for processed articles
-- [ ] **LLM Summary Agent** — Generate executive summaries using GPT-4/Claude
+- [x] **PostgreSQL Integration** — Persistent storage for processed articles ✅
+- [x] **LLM Summary Agent** — Generate summaries using Google Gemini ✅
+- [x] **LangGraph Pipeline** — Visual workflow orchestration ✅
 - [ ] **Real-Time Alerts** — WebSocket notifications for high-impact news
-- [ ] **LangGraph Pipeline** — Visual workflow orchestration
 - [ ] **Evaluation Metrics** — Precision, recall, F1 scores for each agent
 - [ ] **Multi-Language Support** — Process news in Hindi, Chinese, Spanish
 - [ ] **Market Impact Predictor** — ML model for stock price movement prediction

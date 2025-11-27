@@ -18,6 +18,11 @@ from agents.query.agent import QueryAgent
 # Database imports
 from database import db
 
+# LangGraph imports
+from graphs.pipeline_graph import workflow as pipeline_workflow
+from graphs.query_graph import workflow as query_workflow
+from graphs.state import PipelineState, QueryState
+
 # Router initialization
 router = APIRouter()
 
@@ -250,4 +255,101 @@ async def query_articles(request: QueryRequest):
         raise HTTPException(
             status_code=500,
             detail=f"Query execution failed: {str(e)}"
+        )
+
+
+@router.post("/run_graph")
+async def run_pipeline_with_langgraph():
+    """
+    Execute the full pipeline using LangGraph workflow.
+    
+    This endpoint uses LangGraph's StateGraph to orchestrate the pipeline:
+    1. Ingest → Load articles
+    2. Dedup → Remove duplicates
+    3. Entity → Extract entities
+    4. Sentiment → Analyze sentiment
+    5. LLM → Generate summaries
+    6. Index → Store in vector DB
+    
+    Returns:
+        Pipeline execution results with statistics
+    """
+    try:
+        # Initialize state
+        initial_state = PipelineState(stats={})
+        
+        # Run the workflow
+        final_state = await pipeline_workflow.ainvoke(initial_state)
+        
+        # Update global status
+        _pipeline_status["status"] = "completed"
+        _pipeline_status["last_run"] = {
+            "status": "ok",
+            "total_input": final_state.stats.get("total_input", 0),
+            "unique_count": final_state.stats.get("unique_count", 0),
+            "clusters_count": final_state.stats.get("clusters_count", 0),
+            "indexed_count": final_state.stats.get("indexed_count", 0),
+            "sentiment_distribution": final_state.stats.get("sentiment_distribution", {}),
+            "llm_summaries": final_state.stats.get("llm_summaries", 0),
+            "clusters": final_state.clusters,
+            "timestamp": final_state.timestamp
+        }
+        
+        return _pipeline_status["last_run"]
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"LangGraph pipeline execution failed: {str(e)}"
+        )
+
+
+@router.post("/query_graph")
+async def query_with_langgraph(request: QueryRequest):
+    """
+    Query articles using LangGraph workflow.
+    
+    This endpoint uses LangGraph's StateGraph for query processing:
+    1. Parse Query → Extract entities
+    2. Expand Query → Use LLM for enrichment
+    3. Semantic Search → Find relevant articles
+    4. Rerank → Refine results
+    5. Format Response → Structure output
+    
+    Args:
+        request: Query request with query text and optional top_k
+        
+    Returns:
+        Query results with matched entities and ranked articles
+    """
+    try:
+        # Ensure pipeline has been run
+        if _pipeline_status["status"] == "not run":
+            raise HTTPException(
+                status_code=400,
+                detail="Pipeline must be run first. Call POST /pipeline/run_graph to index articles."
+            )
+        
+        # Initialize query state
+        initial_state = QueryState(query=request.query)
+        
+        # Run the workflow
+        final_state = await query_workflow.ainvoke(initial_state)
+        
+        # Format response
+        return {
+            "query": final_state.query,
+            "expanded_query": final_state.expanded_query,
+            "matched_entities": final_state.matched_entities,
+            "results": final_state.reranked[:request.top_k] if final_state.reranked else [],
+            "result_count": len(final_state.reranked) if final_state.reranked else 0,
+            "timestamp": final_state.timestamp
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"LangGraph query execution failed: {str(e)}"
         )
