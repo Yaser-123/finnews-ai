@@ -4,6 +4,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 import sys
 import os
+import asyncio
 
 # Add project root to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
@@ -13,6 +14,9 @@ from agents.entity.agent import EntityAgent
 from agents.sentiment.agent import SentimentAgent
 from agents.llm.agent import LLMAgent
 from agents.query.agent import QueryAgent
+
+# Database imports
+from database import db
 
 # Router initialization
 router = APIRouter()
@@ -61,15 +65,16 @@ def load_demo_articles() -> List[Dict[str, Any]]:
         )
 
 
-def run_pipeline_graph(articles: List[Dict[str, Any]]) -> Dict[str, Any]:
+async def run_pipeline_graph(articles: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    Orchestrate the multi-agent pipeline.
+    Orchestrate the multi-agent pipeline with database persistence.
     
     Pipeline flow:
-    1. Deduplication → remove duplicate articles
-    2. Entity extraction → enrich with entities
-    3. Sentiment analysis → analyze financial sentiment
-    4. Indexing → store in vector database
+    1. Ingest → save articles to database
+    2. Deduplication → remove duplicate articles
+    3. Entity extraction → enrich with entities
+    4. Sentiment analysis → analyze financial sentiment
+    5. Indexing → store in vector database
     
     Args:
         articles: List of raw articles with id and text
@@ -81,25 +86,41 @@ def run_pipeline_graph(articles: List[Dict[str, Any]]) -> Dict[str, Any]:
         # Get agent instances
         dedup_agent, entity_agent, sentiment_agent, llm_agent, query_agent = get_agents()
         
-        # Step 1: Deduplication
+        # Step 1: Save raw articles to database
+        await db.save_articles(articles)
+        
+        # Step 2: Deduplication
         dedup_result = dedup_agent.run(articles)
         unique_articles = dedup_result["unique_articles"]
         clusters = dedup_result["clusters"]
         
-        # Step 2: Entity extraction
+        # Save dedup results to database
+        await db.save_dedup_results(dedup_result)
+        
+        # Step 3: Entity extraction
         enriched_articles = entity_agent.run(unique_articles)
         
-        # Step 3: Sentiment analysis
+        # Save entities to database
+        for article in enriched_articles:
+            if "entities" in article:
+                await db.save_entities(article["id"], article["entities"])
+        
+        # Step 4: Sentiment analysis
         sentiment_articles = sentiment_agent.run(enriched_articles)
         
-        # Step 4: LLM enrichment (optional - for logging/debugging)
+        # Save sentiment to database
+        for article in sentiment_articles:
+            if "sentiment" in article:
+                await db.save_sentiment(article["id"], article["sentiment"])
+        
+        # Step 5: LLM enrichment (optional - for logging/debugging)
         # Generate summaries for first 3 articles as demo
         if sentiment_articles and len(sentiment_articles) > 0:
             sample_summaries = llm_agent.run(sentiment_articles[:3], operation="summarize")
             # Store summaries in pipeline metadata (optional logging)
             _pipeline_status["last_summaries"] = sample_summaries
         
-        # Step 5: Index into vector database
+        # Step 6: Index into vector database
         query_agent.index_articles(sentiment_articles)
         
         return {
@@ -132,9 +153,10 @@ class QueryResponse(BaseModel):
 
 
 @router.post("/run")
-def run_pipeline():
+async def run_pipeline():
     """
-    Execute the full pipeline: ingest → dedup → entity → index.
+    Execute the full pipeline: ingest → dedup → entity → sentiment → index.
+    Persists results to PostgreSQL database.
     
     Returns:
         Pipeline execution summary with statistics
@@ -143,8 +165,8 @@ def run_pipeline():
         # Load demo articles
         articles = load_demo_articles()
         
-        # Run the pipeline graph
-        result = run_pipeline_graph(articles)
+        # Run the pipeline graph (now async with DB writes)
+        result = await run_pipeline_graph(articles)
         
         # Update global status
         _pipeline_status["status"] = "completed"
@@ -179,9 +201,10 @@ def get_pipeline_status():
 
 
 @router.post("/query")
-def query_articles(request: QueryRequest):
+async def query_articles(request: QueryRequest):
     """
     Query indexed articles using natural language.
+    Logs query to database.
     
     Args:
         request: Query request with query text and optional top_k
@@ -197,11 +220,27 @@ def query_articles(request: QueryRequest):
                 detail="Pipeline must be run first. Call POST /pipeline/run to index articles."
             )
         
-        # Get query agent
-        _, _, _, _, query_agent = get_agents()
+        # Get agents
+        _, _, _, llm_agent, query_agent = get_agents()
+        
+        # Optional: Expand query using LLM
+        expanded = None
+        try:
+            expansion_result = llm_agent.expand_query({"query": request.query})
+            expanded = expansion_result.get("expanded")
+        except Exception as e:
+            # Continue without expansion if LLM fails
+            pass
         
         # Execute query
         result = query_agent.query(request.query, n_results=request.top_k)
+        
+        # Save query log to database
+        await db.save_query_log(
+            query=request.query,
+            expanded_query=expanded,
+            result_count=len(result.get("results", []))
+        )
         
         return result
         

@@ -311,6 +311,77 @@ POST /pipeline/query
    python -m spacy download en_core_web_sm
    ```
 
+5. **Configure environment variables**
+   ```bash
+   # Copy the example env file
+   cp .env.example .env
+   
+   # Edit .env and add your credentials:
+   # - DATABASE_URL: Your Neon PostgreSQL connection string
+   # - GEMINI_API_KEY: Your Google Gemini API key
+   ```
+
+---
+
+## 🗄️ Database Setup (PostgreSQL + Neon)
+
+FinNews AI uses **PostgreSQL** (hosted on [Neon](https://neon.tech)) for persistent storage of articles, entities, sentiment, and query logs.
+
+### 1. Create a Neon Database
+
+1. Sign up at [neon.tech](https://neon.tech)
+2. Create a new project
+3. Copy your connection string (it will look like):
+   ```
+   postgresql://username:password@ep-xxx.region.aws.neon.tech/neondb?sslmode=require
+   ```
+
+### 2. Configure Database URL
+
+Add your connection string to `.env`:
+```bash
+DATABASE_URL="postgresql://your-neon-connection-string-here"
+```
+
+### 3. Initialize Database
+
+The database tables are created automatically on first run:
+```bash
+uvicorn main:app --reload
+```
+
+### 4. Run Database Tests (Optional)
+
+Test your database connection:
+```bash
+python demo/test_db.py
+```
+
+### 5. Database Schema
+
+The following tables are created automatically:
+
+- **articles** - Raw financial news articles
+- **dedup_clusters** - Deduplication results with cluster info
+- **entities** - Extracted companies, sectors, regulators, stocks
+- **sentiment** - Sentiment analysis results (positive/negative/neutral)
+- **query_logs** - Query history with LLM expansion and result counts
+
+### 6. Database Migrations (Advanced)
+
+To create and apply custom migrations:
+
+```bash
+# Generate a new migration
+alembic revision --autogenerate -m "your migration message"
+
+# Apply migrations
+alembic upgrade head
+
+# Rollback last migration
+alembic downgrade -1
+```
+
 ---
 
 ## 🚀 Quick Start

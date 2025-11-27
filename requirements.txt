@@ -10,3 +10,8 @@ httpx
 transformers
 torch
 google-generativeai
+sqlalchemy[asyncio]
+asyncpg
+psycopg2-binary
+python-dotenv
+alembic

@@ -1,11 +1,37 @@
 from fastapi import FastAPI
 import uvicorn
 from api.routes.pipeline import router as pipeline_router
+from database import db
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Lifecycle manager for FastAPI app.
+    Handles database initialization on startup and cleanup on shutdown.
+    """
+    # Startup: Initialize database
+    try:
+        db.init_db()
+        await db.create_tables()
+        print("✅ Database initialized successfully")
+    except Exception as e:
+        print(f"⚠️ Database initialization failed: {str(e)}")
+        print("   App will continue without database persistence")
+    
+    yield
+    
+    # Shutdown: Close database connections
+    try:
+        await db.close_db()
+    except Exception as e:
+        print(f"⚠️ Error closing database: {str(e)}")
 
 app = FastAPI(
     title="FinNews AI",
     description="Multi-agent financial news processing pipeline with semantic search",
-    version="0.1.0"
+    version="0.1.0",
+    lifespan=lifespan
 )
 
 # Include pipeline router
