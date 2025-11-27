@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 from agents.dedup.agent import DeduplicationAgent
 from agents.entity.agent import EntityAgent
 from agents.sentiment.agent import SentimentAgent
+from agents.llm.agent import LLMAgent
 from agents.query.agent import QueryAgent
 
 # Router initialization
@@ -21,6 +22,7 @@ _agents = {
     "dedup": None,
     "entity": None,
     "sentiment": None,
+    "llm": None,
     "query": None
 }
 
@@ -37,13 +39,14 @@ def get_agents():
             _agents["dedup"] = DeduplicationAgent(threshold=0.80)
             _agents["entity"] = EntityAgent()
             _agents["sentiment"] = SentimentAgent()
+            _agents["llm"] = LLMAgent()
             _agents["query"] = QueryAgent()
         except Exception as e:
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to initialize agents: {str(e)}"
             )
-    return _agents["dedup"], _agents["entity"], _agents["sentiment"], _agents["query"]
+    return _agents["dedup"], _agents["entity"], _agents["sentiment"], _agents["llm"], _agents["query"]
 
 
 def load_demo_articles() -> List[Dict[str, Any]]:
@@ -76,7 +79,7 @@ def run_pipeline_graph(articles: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
     try:
         # Get agent instances
-        dedup_agent, entity_agent, sentiment_agent, query_agent = get_agents()
+        dedup_agent, entity_agent, sentiment_agent, llm_agent, query_agent = get_agents()
         
         # Step 1: Deduplication
         dedup_result = dedup_agent.run(articles)
@@ -89,7 +92,14 @@ def run_pipeline_graph(articles: List[Dict[str, Any]]) -> Dict[str, Any]:
         # Step 3: Sentiment analysis
         sentiment_articles = sentiment_agent.run(enriched_articles)
         
-        # Step 4: Index into vector database
+        # Step 4: LLM enrichment (optional - for logging/debugging)
+        # Generate summaries for first 3 articles as demo
+        if sentiment_articles and len(sentiment_articles) > 0:
+            sample_summaries = llm_agent.run(sentiment_articles[:3], operation="summarize")
+            # Store summaries in pipeline metadata (optional logging)
+            _pipeline_status["last_summaries"] = sample_summaries
+        
+        # Step 5: Index into vector database
         query_agent.index_articles(sentiment_articles)
         
         return {
@@ -188,7 +198,7 @@ def query_articles(request: QueryRequest):
             )
         
         # Get query agent
-        _, _, _, query_agent = get_agents()
+        _, _, _, _, query_agent = get_agents()
         
         # Execute query
         result = query_agent.query(request.query, n_results=request.top_k)

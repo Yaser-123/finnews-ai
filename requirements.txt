@@ -9,3 +9,4 @@ langgraph
 httpx
 transformers
 torch
+google-generativeai
