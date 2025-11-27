@@ -139,23 +139,77 @@ async def semantic_search_node(state: QueryState) -> Dict[str, Any]:
     """
     Node 3: Semantic search using ChromaDB.
     
-    - Use QueryAgent to search vector database
+    - Use persistent ChromaDB collection
     - Use expanded query if available, otherwise original
+    - Fallback to original query if expanded query returns no results
     - Update state with search results
     """
     logger.info("🔍 Node: Semantic Search - Querying vector database")
     
     try:
-        agents = get_agents()
-        query_agent = agents["query"]
+        from vector_store import chroma_db
+        from sentence_transformers import SentenceTransformer
+        
+        # Get collection
+        collection = chroma_db.get_or_create_collection(chroma_db.COLLECTION_NAME)
+        
+        # Initialize embedding model
+        model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
         
         # Use expanded query if available, otherwise original
         search_query = state.expanded_query or state.query
         
-        # Execute semantic search
-        search_result = query_agent.query(search_query, n_results=10)
+        # Generate query embedding
+        query_embedding = model.encode(search_query).tolist()
         
-        results = search_result.get("results", [])
+        # Execute semantic search
+        search_results = collection.query(
+            query_embeddings=[query_embedding],
+            n_results=10
+        )
+        
+        # Fallback: if expanded query returns no results, try original query
+        if not search_results["documents"] or len(search_results["documents"][0]) == 0:
+            logger.info("⚠️ Expanded query returned no results, trying original query...")
+            
+            # Try with original query text
+            original_embedding = model.encode(state.query).tolist()
+            fallback_results = collection.query(
+                query_embeddings=[original_embedding],
+                n_results=10
+            )
+            
+            if fallback_results["documents"] and len(fallback_results["documents"][0]) > 0:
+                search_results = fallback_results
+                logger.info(f"✅ Fallback search found {len(fallback_results['documents'][0])} results")
+        
+        # Process results
+        results = []
+        if search_results['ids'] and len(search_results['ids'][0]) > 0:
+            for idx, doc_id in enumerate(search_results['ids'][0]):
+                # Calculate relevance score
+                distance = search_results['distances'][0][idx] if 'distances' in search_results else 0
+                score = 1.0 / (1.0 + distance)
+                
+                # Get metadata
+                metadata = search_results['metadatas'][0][idx]
+                document = search_results['documents'][0][idx]
+                
+                # Parse entities from metadata
+                entities = {
+                    "companies": [c for c in metadata.get("companies", "").split(",") if c],
+                    "sectors": [s for s in metadata.get("sectors", "").split(",") if s],
+                    "regulators": [r for r in metadata.get("regulators", "").split(",") if r],
+                    "events": [e for e in metadata.get("events", "").split(",") if e]
+                }
+                
+                results.append({
+                    "id": int(doc_id),
+                    "text": document,
+                    "entities": entities,
+                    "score": round(score, 3)
+                })
+        
         state.results = results
         state.result_count = len(results)
         
@@ -164,6 +218,8 @@ async def semantic_search_node(state: QueryState) -> Dict[str, Any]:
     
     except Exception as e:
         logger.error(f"❌ Semantic search node failed: {str(e)}")
+        import traceback
+        traceback.print_exc()
         state.results = []
         return {"results": [], "result_count": 0}
 

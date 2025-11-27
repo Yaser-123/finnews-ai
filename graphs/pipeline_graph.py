@@ -250,22 +250,70 @@ async def index_node(state: PipelineState) -> Dict[str, Any]:
     """
     Node 6: Vector indexing.
     
-    - Index articles into ChromaDB
+    - Index articles into ChromaDB with LLM summaries
+    - Enhance article text with summaries for better search
     - Set index_done flag
     """
     logger.info("🔍 Node: Index - Storing in vector database")
     
     try:
-        agents = get_agents()
-        query_agent = agents["query"]
+        from vector_store import chroma_db
+        from sentence_transformers import SentenceTransformer
         
-        # Index articles
-        query_agent.index_articles(state.unique_articles)
+        # Get collection
+        collection = chroma_db.get_or_create_collection(chroma_db.COLLECTION_NAME)
+        
+        # Initialize embedding model
+        model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
+        
+        # Get LLM summaries
+        summaries = state.llm_outputs.get("summaries", []) if state.llm_outputs else []
+        summary_map = {s.get("id"): s.get("summary") for s in summaries if s.get("id")}
+        
+        # Prepare data for indexing
+        ids = []
+        embeddings = []
+        documents = []
+        metadatas = []
+        
+        for article in state.unique_articles:
+            article_id = str(article["id"])
+            
+            # Enhance document text with LLM summary if available
+            doc_text = article.get("text", "")
+            summary = summary_map.get(article["id"])
+            if summary:
+                doc_text += f"\n\nSummary: {summary}"
+            
+            # Generate embedding
+            embedding = model.encode(doc_text).tolist()
+            
+            # Extract entities for metadata
+            entities = article.get("entities", {})
+            metadata = {
+                "companies": ",".join(entities.get("companies", [])),
+                "sectors": ",".join(entities.get("sectors", [])),
+                "regulators": ",".join(entities.get("regulators", [])),
+                "events": ",".join(entities.get("events", []))
+            }
+            
+            ids.append(article_id)
+            embeddings.append(embedding)
+            documents.append(doc_text)
+            metadatas.append(metadata)
+        
+        # Add to ChromaDB collection
+        collection.add(
+            ids=ids,
+            embeddings=embeddings,
+            documents=documents,
+            metadatas=metadatas
+        )
         
         state.index_done = True
         state.stats["indexed_count"] = len(state.unique_articles)
         
-        logger.info(f"✅ Indexed {len(state.unique_articles)} articles")
+        logger.info(f"✅ Indexed {len(state.unique_articles)} articles (with {len(summary_map)} summaries)")
         return {"index_done": True, "stats": state.stats}
     
     except Exception as e:

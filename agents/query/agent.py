@@ -2,23 +2,25 @@ import chromadb
 from sentence_transformers import SentenceTransformer
 import spacy
 from typing import List, Dict, Any
+from vector_store import chroma_db
 
 
 class QueryAgent:
-    def __init__(self, model_name="sentence-transformers/all-mpnet-base-v2", collection_name="news"):
+    def __init__(self, model_name="sentence-transformers/all-mpnet-base-v2", collection_name=None):
         """
         Initialize the QueryAgent with ChromaDB and sentence transformers.
         
         Args:
             model_name: Sentence transformer model for embeddings
-            collection_name: Name of the ChromaDB collection
+            collection_name: Name of the ChromaDB collection (defaults to COLLECTION_NAME)
         """
         # Initialize embedding model
         self.model = SentenceTransformer(model_name)
         
-        # Initialize ChromaDB
-        self.client = chromadb.Client()
-        self.collection = self.client.get_or_create_collection(collection_name)
+        # Initialize ChromaDB with persistent storage
+        if collection_name is None:
+            collection_name = chroma_db.COLLECTION_NAME
+        self.collection = chroma_db.get_or_create_collection(collection_name)
         
         # Load spaCy for query intent extraction
         try:
