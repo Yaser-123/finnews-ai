@@ -9,7 +9,7 @@ Tables:
 - query_logs: Query history with expansion and result counts
 """
 
-from sqlalchemy import Column, Integer, BigInteger, Text, Float, DateTime, ARRAY, JSON
+from sqlalchemy import Column, Integer, BigInteger, String, Text, Float, DateTime, ARRAY, JSON, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
 from datetime import datetime
@@ -20,12 +20,16 @@ Base = declarative_base()
 class Article(Base):
     """Raw financial news articles."""
     __tablename__ = "articles"
+    __table_args__ = (
+        UniqueConstraint("hash", name="uq_article_hash"),
+    )
     
     id = Column(BigInteger, primary_key=True, autoincrement=False)
     text = Column(Text, nullable=False)
     source = Column(Text, nullable=True)
     published_at = Column(DateTime, nullable=True, default=func.now())
     created_at = Column(DateTime, nullable=False, default=func.now())
+    hash = Column(String, nullable=True, index=True)
 
 
 class DedupCluster(Base):

@@ -15,7 +15,7 @@ Features:
 import os
 import hashlib
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Set
 from datetime import datetime, timezone
 import asyncio
 
@@ -23,18 +23,33 @@ import httpx
 import feedparser
 from dotenv import load_dotenv
 
+from ingest.utils import clean_html, normalize_title, compute_hash
+
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-# Default RSS feeds (can be overridden via RSS_FEEDS env var)
+# Premium RSS feeds (12 sources for comprehensive financial news coverage)
 DEFAULT_FEEDS = [
+    # Moneycontrol (3 feeds)
     "https://www.moneycontrol.com/rss/latestnews.xml",
-    "https://economictimes.indiatimes.com/industry/banking-finance/rssfeeds/13358259.cms",
+    "https://www.moneycontrol.com/rss/MCtopnews.xml",
+    "https://www.moneycontrol.com/rss/marketreports.xml",
+    # Economic Times (2 feeds)
+    "https://economictimes.indiatimes.com/markets/stocks/rssfeeds/2146842.cms",
+    "https://economictimes.indiatimes.com/industry/banking/finance/rssfeeds/13358259.cms",
+    # Livemint (2 feeds)
     "https://www.livemint.com/rss/money",
-    "https://news.google.com/rss/search?q=RBI+policy&hl=en-IN&gl=IN&ceid=IN:en",
-    "https://news.google.com/rss/search?q=banking+sector&hl=en-IN&gl=IN&ceid=IN:en",
-    "https://news.google.com/rss/search?q=Indian+economy&hl=en-IN&gl=IN&ceid=IN:en",
+    "https://www.livemint.com/rss/markets",
+    # NDTV Profit
+    "https://www.ndtvprofit.com/rss/business",
+    # Financial Times India
+    "https://www.ft.com/rss/world/asia-pacific/india",
+    # CNBC TV18
+    "https://www.cnbctv18.com/rss/business.xml",
+    # Google News (2 feeds)
+    "https://news.google.com/rss/search?q=indian+banking+sector&hl=en-IN&gl=IN&ceid=IN:en",
+    "https://news.google.com/rss/search?q=RBI+policy+india&hl=en-IN&gl=IN&ceid=IN:en",
 ]
 
 
@@ -84,14 +99,14 @@ def generate_article_id(feed_url: str, guid: str, published: str) -> int:
 
 def normalize_entry(feed_url: str, entry: Any) -> Optional[Dict[str, Any]]:
     """
-    Normalize RSS feed entry to article dict.
+    Normalize RSS feed entry to article dict with HTML cleanup and hash.
     
     Args:
         feed_url: Source feed URL
         entry: feedparser entry object
     
     Returns:
-        Article dict with id, title, text, source, published_at
+        Article dict with id, title, text, source, published_at, hash
         or None if entry is invalid
     """
     try:
@@ -101,10 +116,14 @@ def normalize_entry(feed_url: str, entry: Any) -> Optional[Dict[str, Any]]:
             logger.warning(f"Entry missing GUID from {feed_url}")
             return None
         
-        # Extract title
+        # Extract and clean title
         title = entry.get('title', '').strip()
         if not title:
             logger.warning(f"Entry missing title: {guid}")
+            return None
+        
+        title_clean = clean_html(title)
+        if not title_clean:
             return None
         
         # Extract content (prefer summary, fallback to description or content)
@@ -116,8 +135,14 @@ def normalize_entry(feed_url: str, entry: Any) -> Optional[Dict[str, Any]]:
         elif hasattr(entry, 'content') and entry.content:
             summary = entry.content[0].get('value', '')
         
+        # Clean HTML from summary
+        summary_clean = clean_html(summary)
+        
         # Combine title and summary for text
-        text = f"{title}. {summary}".strip()
+        text = f"{title_clean}. {summary_clean}".strip() if summary_clean else title_clean
+        
+        # Generate content hash for deduplication
+        content_hash = compute_hash(normalize_title(title_clean))
         
         # Extract published timestamp
         published_dt = None
@@ -140,11 +165,12 @@ def normalize_entry(feed_url: str, entry: Any) -> Optional[Dict[str, Any]]:
         
         return {
             "id": article_id,
-            "title": title,
+            "title": title_clean,
             "text": text,
             "source": feed_url,
             "published_at": published_dt,  # Naive datetime for PostgreSQL
-            "guid": guid
+            "guid": guid,
+            "hash": content_hash
         }
     
     except Exception as e:
@@ -212,13 +238,13 @@ async def fetch_feed(session: httpx.AsyncClient, feed_url: str) -> List[Dict[str
 
 async def fetch_all(feeds: Optional[List[str]] = None) -> List[Dict[str, Any]]:
     """
-    Fetch and parse all RSS feeds concurrently.
+    Fetch and parse all RSS feeds concurrently with hash-based deduplication.
     
     Args:
         feeds: Optional list of feed URLs (uses configured feeds if None)
     
     Returns:
-        List of all normalized articles from all feeds
+        List of unique normalized articles from all feeds (deduplicated by hash)
     """
     if feeds is None:
         feeds = get_configured_feeds()
@@ -242,21 +268,36 @@ async def fetch_all(feeds: Optional[List[str]] = None) -> List[Dict[str, Any]]:
             if result:  # Count non-empty results
                 successful_feeds += 1
     
-    # Deduplicate by ID (in case of duplicate articles across feeds)
-    seen_ids = set()
+    # Deduplicate by hash (content-based) and ID (feed-based)
+    seen_ids: Set[int] = set()
+    seen_hashes: Set[str] = set()
     deduplicated = []
-    duplicates = 0
+    id_duplicates = 0
+    hash_duplicates = 0
     
     for article in all_articles:
-        if article['id'] not in seen_ids:
-            seen_ids.add(article['id'])
-            deduplicated.append(article)
-        else:
-            duplicates += 1
+        # Skip if duplicate by ID
+        if article['id'] in seen_ids:
+            id_duplicates += 1
+            continue
+        
+        # Skip if duplicate by content hash
+        article_hash = article.get('hash', '')
+        if article_hash and article_hash in seen_hashes:
+            hash_duplicates += 1
+            continue
+        
+        # Add to results
+        seen_ids.add(article['id'])
+        if article_hash:
+            seen_hashes.add(article_hash)
+        deduplicated.append(article)
     
     logger.info(f"✅ Total fetched: {len(all_articles)} articles from {successful_feeds}/{len(feeds)} feeds")
-    if duplicates > 0:
-        logger.info(f"🔄 Removed {duplicates} duplicate articles across feeds")
+    if id_duplicates > 0:
+        logger.info(f"🔄 Removed {id_duplicates} duplicate articles by ID")
+    if hash_duplicates > 0:
+        logger.info(f"🔄 Removed {hash_duplicates} duplicate articles by content hash")
     
     all_articles = deduplicated
     
