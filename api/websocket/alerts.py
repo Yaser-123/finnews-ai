@@ -25,6 +25,8 @@ class AlertManager:
     
     def __init__(self):
         self.connections: List[WebSocket] = []
+        self.alert_history: List[Dict[str, Any]] = []  # Store recent alerts for dashboard
+        self.max_history = 100  # Keep last 100 alerts
         logger.info("🔔 Alert Manager initialized")
     
     async def connect(self, ws: WebSocket):
@@ -75,8 +77,9 @@ class AlertManager:
         self, 
         level: str, 
         article_id: int, 
-        text: str, 
-        sentiment: str = None,
+        headline: str = None,
+        text: str = None,
+        sentiment: Dict[str, Any] = None,
         entities: Dict[str, List[str]] = None,
         summary: str = None
     ):
@@ -84,19 +87,25 @@ class AlertManager:
         Helper method to send a formatted alert.
         
         Args:
-            level: Alert level (HIGH_RISK, BULLISH, REGULATORY_UPDATE, EARNINGS_UPDATE)
+            level: Alert level (HIGH_RISK, BULLISH, REGULATORY_UPDATE, EARNINGS_UPDATE, ALERT)
             article_id: ID of the article
-            text: Article text
-            sentiment: Sentiment label (optional)
+            headline: Article headline (preferred)
+            text: Article text (fallback if headline not provided)
+            sentiment: Sentiment dict with label and score (optional)
             entities: Extracted entities (optional)
             summary: LLM-generated summary (optional)
         """
+        from datetime import datetime
+        
+        # Use headline if provided, otherwise use text
+        display_text = headline or text or "No headline"
+        
         alert = {
             "level": level,
             "article_id": article_id,
-            "headline": text[:120] + "..." if len(text) > 120 else text,
-            "sentiment": sentiment,
-            "timestamp": None  # Will be set by client
+            "headline": display_text[:120] + "..." if len(display_text) > 120 else display_text,
+            "sentiment": sentiment.get("label") if sentiment else None,
+            "timestamp": datetime.now().isoformat()
         }
         
         if entities:
@@ -109,7 +118,26 @@ class AlertManager:
         if summary:
             alert["summary"] = summary[:200] + "..." if len(summary) > 200 else summary
         
+        # Store in history for dashboard
+        self.alert_history.append(alert)
+        
+        # Keep only last N alerts
+        if len(self.alert_history) > self.max_history:
+            self.alert_history = self.alert_history[-self.max_history:]
+        
         await self.broadcast(alert)
+    
+    def get_recent_alerts(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """
+        Get recent alerts for dashboard display.
+        
+        Args:
+            limit: Maximum number of alerts to return
+        
+        Returns:
+            List of recent alert dictionaries
+        """
+        return self.alert_history[-limit:][::-1]  # Most recent first
 
 
 # Global singleton instance

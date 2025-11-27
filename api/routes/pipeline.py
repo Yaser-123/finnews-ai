@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 import sys
@@ -162,8 +162,40 @@ async def run_pipeline_on_articles(articles: List[Dict[str, Any]]) -> Dict[str, 
 
 # Request/Response models
 class QueryRequest(BaseModel):
-    query: str
-    top_k: Optional[int] = 5
+    query: str = Field(
+        ...,
+        description="Natural language query about financial news",
+        examples=[
+            "What are the latest updates on HDFC Bank?",
+            "Show me articles about RBI monetary policy",
+            "Find news about Indian banking sector regulations"
+        ]
+    )
+    top_k: Optional[int] = Field(
+        default=5,
+        description="Number of top results to return",
+        ge=1,
+        le=20,
+        examples=[5, 10]
+    )
+    
+    class Config:
+        json_schema_extra = {
+            "examples": [
+                {
+                    "query": "What are the latest updates on HDFC Bank?",
+                    "top_k": 5
+                },
+                {
+                    "query": "Show me articles about RBI monetary policy",
+                    "top_k": 10
+                },
+                {
+                    "query": "Find news about Indian banking sector regulations",
+                    "top_k": 5
+                }
+            ]
+        }
 
 
 class QueryResponse(BaseModel):
@@ -220,17 +252,34 @@ def get_pipeline_status():
     return _pipeline_status["last_run"]
 
 
-@router.post("/query")
+@router.post(
+    "/query",
+    tags=["Query System"],
+    summary="Query Financial News with Natural Language",
+    response_description="Ranked articles with matched entities and semantic relevance scores"
+)
 async def query_articles(request: QueryRequest):
     """
-    Query indexed articles using natural language.
-    Logs query to database.
+    Query indexed articles using natural language with semantic search.
     
-    Args:
-        request: Query request with query text and optional top_k
-        
-    Returns:
-        Query results with matched entities and ranked articles
+    **Features:**
+    - Natural language understanding (powered by LLM query expansion)
+    - Entity matching (companies, regulators, sectors)
+    - Semantic vector search (ChromaDB)
+    - Query logging for analytics
+    
+    **Example Queries:**
+    - "What are the latest updates on HDFC Bank?"
+    - "Show me articles about RBI monetary policy"
+    - "Find news about Indian banking sector regulations"
+    - "Articles about stock market volatility"
+    
+    **Returns:**
+    - Matched entities from your query
+    - Top K ranked articles with relevance scores
+    - Article metadata (sentiment, source, timestamp)
+    
+    **Note:** Pipeline must be run first to index articles. Call `POST /pipeline/run` to initialize.
     """
     try:
         # Ensure pipeline has been run
