@@ -42,27 +42,26 @@ class Settings:
                 if feed.strip()
             ]
         else:
-            # Use default premium feeds (12 sources)
+            # Use default verified working feeds (12 sources)
             self.RSS_FEED_LIST = [
-                # Moneycontrol (3 feeds)
-                "https://www.moneycontrol.com/rss/latestnews.xml",
-                "https://www.moneycontrol.com/rss/MCtopnews.xml",
-                "https://www.moneycontrol.com/rss/marketreports.xml",
-                # Economic Times (2 feeds)
+                # Economic Times (3 feeds)
                 "https://economictimes.indiatimes.com/markets/stocks/rssfeeds/2146842.cms",
                 "https://economictimes.indiatimes.com/industry/banking/finance/rssfeeds/13358259.cms",
+                "https://economictimes.indiatimes.com/rssfeedstopstories.cms",
                 # Livemint (2 feeds)
                 "https://www.livemint.com/rss/money",
                 "https://www.livemint.com/rss/markets",
-                # NDTV Profit
-                "https://www.ndtvprofit.com/rss/business",
+                # NDTV (main RSS)
+                "https://www.ndtv.com/rss",
                 # Financial Times India
                 "https://www.ft.com/rss/world/asia-pacific/india",
-                # CNBC TV18
-                "https://www.cnbctv18.com/rss/business.xml",
-                # Google News (2 feeds)
+                # CNBC TV18 (corrected)
+                "https://www.cnbctv18.com/rss/",
+                # Google News (4 feeds for comprehensive coverage)
                 "https://news.google.com/rss/search?q=indian+banking+sector&hl=en-IN&gl=IN&ceid=IN:en",
                 "https://news.google.com/rss/search?q=RBI+policy+india&hl=en-IN&gl=IN&ceid=IN:en",
+                "https://news.google.com/rss/search?q=indian+stock+market&hl=en-IN&gl=IN&ceid=IN:en",
+                "https://news.google.com/rss/search?q=india+economy&hl=en-IN&gl=IN&ceid=IN:en",
             ]
     
     def get_feed_count(self) -> int:
