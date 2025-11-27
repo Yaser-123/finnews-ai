@@ -1,0 +1,25 @@
+{
+  "description": "Ground truth sentiment labels for evaluation",
+  "sentiments": {
+    "1": "positive",
+    "2": "positive",
+    "3": "neutral",
+    "4": "positive",
+    "5": "positive",
+    "6": "positive",
+    "7": "positive",
+    "8": "positive",
+    "9": "negative",
+    "10": "positive",
+    "11": "positive",
+    "12": "neutral",
+    "13": "positive",
+    "14": "positive",
+    "15": "positive",
+    "16": "neutral",
+    "17": "neutral",
+    "18": "positive",
+    "19": "positive",
+    "20": "positive"
+  }
+}

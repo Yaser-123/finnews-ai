@@ -1,0 +1,80 @@
+{
+  "timestamp": "2025-11-27T23:27:26.493620",
+  "evaluations": {
+    "dedup": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "false_merges": [],
+      "missed_merges": [],
+      "total_predicted": 7,
+      "total_ground_truth": 7,
+      "true_positives": 7,
+      "false_positives": 0,
+      "false_negatives": 0
+    },
+    "entities": {
+      "overall_precision": 1.0,
+      "overall_recall": 0.9398,
+      "overall_f1": 0.9611,
+      "by_category": {
+        "companies": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "num_articles": 3
+        },
+        "sectors": {
+          "precision": 1.0,
+          "recall": 0.8889,
+          "f1": 0.9333,
+          "num_articles": 3
+        },
+        "regulators": {
+          "precision": 1.0,
+          "recall": 0.75,
+          "f1": 0.8334,
+          "num_articles": 2
+        },
+        "people": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "num_articles": 3
+        },
+        "events": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "num_articles": 3
+        },
+        "stocks": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "num_articles": 3
+        }
+      },
+      "total_articles_evaluated": 3
+    },
+    "query": {
+      "skipped": true
+    },
+    "sentiment": {
+      "accuracy": 1.0,
+      "total_articles": 20,
+      "correct_predictions": 20,
+      "incorrect_predictions": 0,
+      "per_class_accuracy": {
+        "positive": 1.0,
+        "negative": 1.0,
+        "neutral": 1.0
+      },
+      "confusion_matrix": {
+        "positive -> positive": 15,
+        "neutral -> neutral": 4,
+        "negative -> negative": 1
+      }
+    }
+  }
+}

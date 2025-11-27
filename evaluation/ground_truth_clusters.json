@@ -1,0 +1,28 @@
+{
+  "description": "Ground truth deduplication clusters for evaluation",
+  "clusters": [
+    {
+      "main_id": 1,
+      "merged_ids": [
+        7,
+        13
+      ],
+      "reason": "Same RBI repo rate announcement"
+    },
+    {
+      "main_id": 2,
+      "merged_ids": [
+        8,
+        14
+      ],
+      "reason": "Reliance profit report duplicates"
+    },
+    {
+      "main_id": 5,
+      "merged_ids": [
+        10
+      ],
+      "reason": "Tesla India expansion news"
+    }
+  ]
+}

@@ -1,0 +1,71 @@
+{
+  "description": "Ground truth entity annotations for evaluation",
+  "entities": {
+    "1": {
+      "companies": [
+        "Reserve Bank of India",
+        "State Bank of India"
+      ],
+      "sectors": [
+        "Banking",
+        "Financial Services"
+      ],
+      "regulators": [
+        "RBI",
+        "SEBI"
+      ],
+      "people": [
+        "Shaktikanta Das"
+      ],
+      "events": [
+        "Monetary Policy Committee Meeting"
+      ],
+      "stocks": [
+        "SBIN"
+      ]
+    },
+    "2": {
+      "companies": [
+        "Reliance Industries",
+        "Jio Platforms"
+      ],
+      "sectors": [
+        "Telecom",
+        "Energy",
+        "Retail"
+      ],
+      "regulators": [],
+      "people": [
+        "Mukesh Ambani"
+      ],
+      "events": [
+        "Q4 Earnings"
+      ],
+      "stocks": [
+        "RELIANCE"
+      ]
+    },
+    "5": {
+      "companies": [
+        "Tesla Inc",
+        "Tesla India"
+      ],
+      "sectors": [
+        "Electric Vehicles",
+        "Automotive"
+      ],
+      "regulators": [
+        "Ministry of Heavy Industries"
+      ],
+      "people": [
+        "Elon Musk"
+      ],
+      "events": [
+        "India Market Entry"
+      ],
+      "stocks": [
+        "TSLA"
+      ]
+    }
+  }
+}

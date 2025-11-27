@@ -103,7 +103,10 @@ async def get_session() -> AsyncSession:
 
 async def save_articles(articles: List[Dict[str, Any]]) -> List[int]:
     """
-    Save articles to database.
+    Save articles to database with smart reset.
+    
+    Deletes only the articles with matching IDs before inserting,
+    preventing IntegrityError on repeated pipeline runs.
     
     Args:
         articles: List of article dicts with "id", "text", "source", "published_at"
@@ -115,11 +118,28 @@ async def save_articles(articles: List[Dict[str, Any]]) -> List[int]:
         logger.warning("Database not initialized. Skipping article save.")
         return []
     
+    if not articles:
+        logger.info("No articles to save")
+        return []
+    
     try:
         session = await get_session()
         async with session:
-            inserted_ids = []
+            # Extract IDs from incoming articles
+            incoming_ids = [article.get("id") for article in articles if article.get("id") is not None]
             
+            if incoming_ids:
+                # Smart Reset: Delete only the articles being inserted
+                from sqlalchemy import delete
+                delete_stmt = delete(Article).where(Article.id.in_(incoming_ids))
+                result = await session.execute(delete_stmt)
+                deleted_count = result.rowcount
+                
+                if deleted_count > 0:
+                    logger.info(f"🧹 Smart Reset: Removed {deleted_count} existing demo articles")
+            
+            # Bulk insert new articles
+            inserted_ids = []
             for article in articles:
                 new_article = Article(
                     id=article.get("id"),
@@ -130,6 +150,7 @@ async def save_articles(articles: List[Dict[str, Any]]) -> List[int]:
                 session.add(new_article)
                 inserted_ids.append(article.get("id"))
             
+            # Commit transaction (delete + insert)
             await session.commit()
             logger.info(f"✅ Saved {len(inserted_ids)} articles to database")
             return inserted_ids
