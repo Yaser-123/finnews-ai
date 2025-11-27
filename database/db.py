@@ -76,6 +76,11 @@ def init_db():
         raise
 
 
+def get_engine():
+    """Get the database engine instance."""
+    return engine
+
+
 async def create_tables():
     """Create all tables if they don't exist."""
     if not engine:
@@ -89,6 +94,36 @@ async def create_tables():
     except Exception as e:
         logger.error(f"❌ Failed to create tables: {str(e)}")
         raise
+
+
+async def run_migrations():
+    """
+    Run all pending database migrations.
+    
+    This function runs automatically on application startup.
+    Migrations are idempotent and can be run multiple times safely.
+    """
+    if not engine:
+        logger.warning("Database not initialized. Skipping migrations.")
+        return
+    
+    try:
+        # Import migration modules
+        from database.migrations.migration_001_add_hash_column import run_migration as run_001
+        
+        # Run migrations in order
+        logger.info("🔄 Running database migrations...")
+        
+        success = await run_001(engine)
+        
+        if success:
+            logger.info("✅ All migrations completed successfully")
+        else:
+            logger.warning("⚠️ Some migrations failed or were skipped")
+    
+    except Exception as e:
+        logger.error(f"❌ Migration runner failed: {str(e)}")
+        logger.exception(e)
 
 
 async def get_session() -> AsyncSession:
@@ -145,7 +180,8 @@ async def save_articles(articles: List[Dict[str, Any]]) -> List[int]:
                     id=article.get("id"),
                     text=article.get("text", ""),
                     source=article.get("source"),
-                    published_at=article.get("published_at")
+                    published_at=article.get("published_at"),
+                    hash=article.get("hash")  # Include hash if provided
                 )
                 session.add(new_article)
                 inserted_ids.append(article.get("id"))
@@ -422,7 +458,8 @@ async def save_new_articles(articles: List[Dict[str, Any]]) -> List[int]:
                     id=article.get("id"),
                     text=article.get("text", ""),
                     source=article.get("source"),
-                    published_at=article.get("published_at")
+                    published_at=article.get("published_at"),
+                    hash=article.get("hash")  # Include hash if provided
                 )
                 session.add(new_article)
                 inserted_ids.append(article.get("id"))

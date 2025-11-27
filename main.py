@@ -17,6 +17,9 @@ async def lifespan(app: FastAPI):
         db.init_db()
         await db.create_tables()
         print("✅ Database initialized successfully")
+        
+        # Run migrations automatically on startup
+        await db.run_migrations()
     except Exception as e:
         print(f"⚠️ Database initialization failed: {str(e)}")
         print("   App will continue without database persistence")
