@@ -1,6 +1,7 @@
 from fastapi import FastAPI, WebSocket
 import uvicorn
 from api.routes.pipeline import router as pipeline_router
+from api.scheduler import router as scheduler_router, init_scheduler, shutdown_scheduler
 from api.websocket.alerts import alert_manager
 from database import db
 from contextlib import asynccontextmanager
@@ -20,7 +21,20 @@ async def lifespan(app: FastAPI):
         print(f"⚠️ Database initialization failed: {str(e)}")
         print("   App will continue without database persistence")
     
+    # Startup: Initialize scheduler
+    try:
+        init_scheduler()
+        print("✅ Scheduler initialized successfully")
+    except Exception as e:
+        print(f"⚠️ Scheduler initialization failed: {str(e)}")
+    
     yield
+    
+    # Shutdown: Stop scheduler
+    try:
+        shutdown_scheduler()
+    except Exception as e:
+        print(f"⚠️ Error shutting down scheduler: {str(e)}")
     
     # Shutdown: Close database connections
     try:
@@ -30,13 +44,14 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="FinNews AI",
-    description="Multi-agent financial news processing pipeline with semantic search",
-    version="0.1.0",
+    description="Multi-agent financial news processing pipeline with semantic search and real-time ingestion",
+    version="0.2.0",
     lifespan=lifespan
 )
 
-# Include pipeline router
+# Include routers
 app.include_router(pipeline_router, prefix="/pipeline", tags=["pipeline"])
+app.include_router(scheduler_router, prefix="/scheduler", tags=["scheduler"])
 
 @app.get("/health")
 def health():

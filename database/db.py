@@ -347,6 +347,96 @@ async def get_recent_articles(limit: int = 10) -> List[Dict[str, Any]]:
         return []
 
 
+async def existing_ids(ids: List[int]) -> set:
+    """
+    Check which article IDs already exist in the database.
+    
+    Args:
+        ids: List of article IDs to check
+    
+    Returns:
+        Set of IDs that already exist in the database
+    """
+    if not async_session_factory:
+        logger.warning("Database not initialized. Returning empty set.")
+        return set()
+    
+    if not ids:
+        return set()
+    
+    try:
+        session = await get_session()
+        async with session:
+            from sqlalchemy import select
+            stmt = select(Article.id).where(Article.id.in_(ids))
+            result = await session.execute(stmt)
+            existing = {row[0] for row in result.fetchall()}
+            return existing
+    
+    except Exception as e:
+        logger.error(f"❌ Failed to check existing IDs: {str(e)}")
+        return set()
+
+
+async def save_new_articles(articles: List[Dict[str, Any]]) -> List[int]:
+    """
+    Save only new articles to database (incremental insert).
+    
+    Checks for existing IDs and only inserts articles that don't exist.
+    
+    Args:
+        articles: List of article dicts with "id", "text", "source", "published_at"
+    
+    Returns:
+        List of newly inserted article IDs
+    """
+    if not async_session_factory:
+        logger.warning("Database not initialized. Skipping article save.")
+        return []
+    
+    if not articles:
+        logger.info("No articles to save")
+        return []
+    
+    try:
+        # Extract IDs and check which already exist
+        incoming_ids = [article.get("id") for article in articles if article.get("id") is not None]
+        existing = await existing_ids(incoming_ids)
+        
+        # Filter to new articles only
+        new_articles = [a for a in articles if a.get("id") not in existing]
+        
+        if not new_articles:
+            logger.info("No new articles to save (all already exist)")
+            return []
+        
+        logger.info(f"Saving {len(new_articles)} new articles (skipping {len(existing)} existing)")
+        
+        # Insert new articles in transaction
+        session = await get_session()
+        async with session:
+            inserted_ids = []
+            
+            for article in new_articles:
+                new_article = Article(
+                    id=article.get("id"),
+                    text=article.get("text", ""),
+                    source=article.get("source"),
+                    published_at=article.get("published_at")
+                )
+                session.add(new_article)
+                inserted_ids.append(article.get("id"))
+            
+            # Commit transaction
+            await session.commit()
+            logger.info(f"✅ Saved {len(inserted_ids)} new articles to database")
+            return inserted_ids
+    
+    except Exception as e:
+        logger.error(f"❌ Failed to save new articles: {str(e)}")
+        return []
+
+
 async def close_db():
     """Close database connections."""
     if engine:

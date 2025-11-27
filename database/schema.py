@@ -9,7 +9,7 @@ Tables:
 - query_logs: Query history with expansion and result counts
 """
 
-from sqlalchemy import Column, Integer, Text, Float, DateTime, ARRAY, JSON
+from sqlalchemy import Column, Integer, BigInteger, Text, Float, DateTime, ARRAY, JSON
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
 from datetime import datetime
@@ -21,7 +21,7 @@ class Article(Base):
     """Raw financial news articles."""
     __tablename__ = "articles"
     
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(BigInteger, primary_key=True, autoincrement=False)
     text = Column(Text, nullable=False)
     source = Column(Text, nullable=True)
     published_at = Column(DateTime, nullable=True, default=func.now())

@@ -15,3 +15,5 @@ asyncpg
 psycopg2-binary
 python-dotenv
 alembic
+feedparser
+apscheduler

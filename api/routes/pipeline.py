@@ -145,6 +145,21 @@ async def run_pipeline_graph(articles: List[Dict[str, Any]]) -> Dict[str, Any]:
         )
 
 
+async def run_pipeline_on_articles(articles: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Public function to run pipeline on a list of articles.
+    
+    This can be called programmatically from other modules (e.g., scheduler).
+    
+    Args:
+        articles: List of article dicts
+    
+    Returns:
+        Pipeline execution results
+    """
+    return await run_pipeline_graph(articles)
+
+
 # Request/Response models
 class QueryRequest(BaseModel):
     query: str
