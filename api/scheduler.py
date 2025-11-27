@@ -260,6 +260,14 @@ async def start_scheduler(request: Optional[SchedulerStartRequest] = None):
         else:
             interval = int(os.getenv("INGEST_INTERVAL", "60"))
         
+        # UPGRADE #6: Safety fallback for high feed count (>10 feeds = 120s minimum)
+        # Prevents rate limiting on Neon with many RSS sources
+        from ingest.realtime import get_configured_feeds
+        feeds = get_configured_feeds()
+        if len(feeds) > 10 and interval < 120:
+            logger.warning(f"⚠️  High feed count ({len(feeds)} feeds) - enforcing 120s minimum interval (was {interval}s)")
+            interval = 120
+        
         # Check if job already exists
         existing_job = scheduler.get_job("realtime_ingest_job")
         
@@ -391,6 +399,13 @@ def init_scheduler():
     
     if auto_start:
         interval = int(os.getenv("INGEST_INTERVAL", "60"))
+        
+        # UPGRADE #6: Safety fallback for high feed count (>10 feeds = 120s minimum)
+        from ingest.realtime import get_configured_feeds
+        feeds = get_configured_feeds()
+        if len(feeds) > 10 and interval < 120:
+            logger.warning(f"⚠️  High feed count ({len(feeds)} feeds) - enforcing 120s minimum interval (was {interval}s)")
+            interval = 120
         
         scheduler.add_job(
             realtime_ingest_job,

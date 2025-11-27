@@ -138,13 +138,13 @@ async def get_session() -> AsyncSession:
 
 async def save_articles(articles: List[Dict[str, Any]]) -> List[int]:
     """
-    Save articles to database with smart reset.
+    Ultra-fast batch insert with UPSERT for real-time ingestion.
     
-    Deletes only the articles with matching IDs before inserting,
-    preventing IntegrityError on repeated pipeline runs.
+    Uses ON CONFLICT DO NOTHING for database-level deduplication.
+    Batch size: 50 items per insert for optimal performance.
     
     Args:
-        articles: List of article dicts with "id", "text", "source", "published_at"
+        articles: List of article dicts with "id", "text", "source", "published_at", "hash"
     
     Returns:
         List of inserted article IDs
@@ -158,38 +158,64 @@ async def save_articles(articles: List[Dict[str, Any]]) -> List[int]:
         return []
     
     try:
+        import time
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        
+        start_time = time.time()
+        batch_size = 50
+        inserted_count = 0
+        retry_count = 0
+        max_retries = 1
+        
         session = await get_session()
         async with session:
-            # Extract IDs from incoming articles
-            incoming_ids = [article.get("id") for article in articles if article.get("id") is not None]
-            
-            if incoming_ids:
-                # Smart Reset: Delete only the articles being inserted
-                from sqlalchemy import delete
-                delete_stmt = delete(Article).where(Article.id.in_(incoming_ids))
-                result = await session.execute(delete_stmt)
-                deleted_count = result.rowcount
+            # Split into batches of 50
+            for i in range(0, len(articles), batch_size):
+                batch = articles[i:i + batch_size]
                 
-                if deleted_count > 0:
-                    logger.info(f"🧹 Smart Reset: Removed {deleted_count} existing demo articles")
+                # Prepare batch data
+                batch_data = []
+                for article in batch:
+                    batch_data.append({
+                        "id": article.get("id"),
+                        "text": article.get("text", ""),
+                        "source": article.get("source"),
+                        "published_at": article.get("published_at"),
+                        "hash": article.get("hash")
+                    })
+                
+                # Retry logic for rate limits
+                while retry_count <= max_retries:
+                    try:
+                        # Use PostgreSQL INSERT ... ON CONFLICT DO NOTHING
+                        stmt = pg_insert(Article).values(batch_data)
+                        stmt = stmt.on_conflict_do_nothing(index_elements=['hash'])
+                        
+                        await session.execute(stmt)
+                        inserted_count += len(batch)
+                        break  # Success, exit retry loop
+                    
+                    except Exception as e:
+                        error_str = str(e).lower()
+                        if 'too many requests' in error_str or '429' in error_str:
+                            retry_count += 1
+                            if retry_count <= max_retries:
+                                logger.warning(f"⚠️  Neon rate limit hit, retrying in 3s... ({retry_count}/{max_retries})")
+                                import asyncio
+                                await asyncio.sleep(3)
+                            else:
+                                logger.error(f"❌ Rate limit exceeded, skipping batch after {max_retries} retries")
+                                break
+                        else:
+                            # Non-rate-limit error, re-raise
+                            raise
             
-            # Bulk insert new articles
-            inserted_ids = []
-            for article in articles:
-                new_article = Article(
-                    id=article.get("id"),
-                    text=article.get("text", ""),
-                    source=article.get("source"),
-                    published_at=article.get("published_at"),
-                    hash=article.get("hash")  # Include hash if provided
-                )
-                session.add(new_article)
-                inserted_ids.append(article.get("id"))
-            
-            # Commit transaction (delete + insert)
             await session.commit()
-            logger.info(f"✅ Saved {len(inserted_ids)} articles to database")
-            return inserted_ids
+            
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            logger.info(f"⚡ Batch insert completed in {elapsed_ms}ms ({inserted_count} articles)")
+            
+            return [a.get("id") for a in articles[:inserted_count]]
     
     except Exception as e:
         logger.error(f"❌ Failed to save articles: {str(e)}")
@@ -414,14 +440,19 @@ async def existing_ids(ids: List[int]) -> set:
         return set()
 
 
-async def save_new_articles(articles: List[Dict[str, Any]]) -> List[int]:
+async def save_new_articles_batch(articles: List[Dict[str, Any]]) -> List[int]:
     """
-    Save only new articles to database (incremental insert).
+    OPTIMIZED: Ultra-fast batch insert for real-time ingestion with deduplication.
     
-    Checks for existing IDs and only inserts articles that don't exist.
+    Features:
+    - Single SELECT query to check existing hashes
+    - In-memory deduplication before DB touch
+    - Batch INSERT with ON CONFLICT DO NOTHING (50 per batch)
+    - Rate limit protection with retry logic
+    - Detailed logging for hackathon demo
     
     Args:
-        articles: List of article dicts with "id", "text", "source", "published_at"
+        articles: List of article dicts with "id", "text", "source", "published_at", "hash"
     
     Returns:
         List of newly inserted article IDs
@@ -435,43 +466,132 @@ async def save_new_articles(articles: List[Dict[str, Any]]) -> List[int]:
         return []
     
     try:
-        # Extract IDs and check which already exist
-        incoming_ids = [article.get("id") for article in articles if article.get("id") is not None]
-        existing = await existing_ids(incoming_ids)
+        import time
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        from sqlalchemy import text
         
-        # Filter to new articles only
-        new_articles = [a for a in articles if a.get("id") not in existing]
+        logger.info("🚀 Ingestion batch started")
+        start_time = time.time()
         
-        if not new_articles:
-            logger.info("No new articles to save (all already exist)")
+        # STEP 1: In-memory deduplication (Upgrade #2)
+        logger.info(f"📦 Fetched {len(articles)} articles")
+        
+        hashes_seen = set()
+        unique_articles = []
+        in_memory_dups = 0
+        
+        for article in articles:
+            article_hash = article.get("hash")
+            if article_hash and article_hash in hashes_seen:
+                in_memory_dups += 1
+                continue
+            if article_hash:
+                hashes_seen.add(article_hash)
+            unique_articles.append(article)
+        
+        if in_memory_dups > 0:
+            logger.info(f"🧹 Removed {in_memory_dups} duplicates (in-memory)")
+        
+        if not unique_articles:
+            logger.info("No unique articles to save after deduplication")
             return []
         
-        logger.info(f"Saving {len(new_articles)} new articles (skipping {len(existing)} existing)")
-        
-        # Insert new articles in transaction
+        # STEP 2: Check existing hashes in DB with single query (Upgrade #3)
         session = await get_session()
         async with session:
+            hash_list = [a.get("hash") for a in unique_articles if a.get("hash")]
+            
+            if hash_list:
+                # Single query to get all existing hashes
+                result = await session.execute(
+                    text("SELECT hash FROM articles WHERE hash = ANY(:hash_list)"),
+                    {"hash_list": hash_list}
+                )
+                existing_hashes = {row[0] for row in result.fetchall()}
+                
+                # Filter to truly new articles
+                truly_new = [a for a in unique_articles if a.get("hash") not in existing_hashes]
+                db_dups = len(unique_articles) - len(truly_new)
+                
+                if db_dups > 0:
+                    logger.info(f"🧹 Removed {db_dups} duplicates (already in DB)")
+            else:
+                truly_new = unique_articles
+            
+            if not truly_new:
+                logger.info("No new articles to save (all already in database)")
+                return []
+            
+            logger.info(f"💾 Writing {len(truly_new)} new articles to Neon (batch size 50)")
+            
+            # STEP 3: Batch insert with ON CONFLICT (Upgrade #1 + #4)
+            batch_size = 50
+            inserted_count = 0
             inserted_ids = []
             
-            for article in new_articles:
-                new_article = Article(
-                    id=article.get("id"),
-                    text=article.get("text", ""),
-                    source=article.get("source"),
-                    published_at=article.get("published_at"),
-                    hash=article.get("hash")  # Include hash if provided
-                )
-                session.add(new_article)
-                inserted_ids.append(article.get("id"))
+            for i in range(0, len(truly_new), batch_size):
+                batch = truly_new[i:i + batch_size]
+                
+                # Prepare batch data
+                batch_data = []
+                for article in batch:
+                    batch_data.append({
+                        "id": article.get("id"),
+                        "text": article.get("text", ""),
+                        "source": article.get("source"),
+                        "published_at": article.get("published_at"),
+                        "hash": article.get("hash")
+                    })
+                
+                # Rate limit protection (Upgrade #4)
+                retry_count = 0
+                max_retries = 1
+                
+                while retry_count <= max_retries:
+                    try:
+                        # PostgreSQL UPSERT with ON CONFLICT DO NOTHING
+                        stmt = pg_insert(Article).values(batch_data)
+                        stmt = stmt.on_conflict_do_nothing(index_elements=['hash'])
+                        
+                        await session.execute(stmt)
+                        inserted_count += len(batch)
+                        inserted_ids.extend([a.get("id") for a in batch])
+                        break  # Success
+                    
+                    except Exception as e:
+                        error_str = str(e).lower()
+                        if 'too many requests' in error_str or '429' in error_str or 'rate limit' in error_str:
+                            retry_count += 1
+                            if retry_count <= max_retries:
+                                logger.warning(f"⚠️  Neon rate limit hit, retrying in 3s... ({retry_count}/{max_retries})")
+                                import asyncio
+                                await asyncio.sleep(3)
+                            else:
+                                logger.error(f"❌ Rate limit exceeded, skipping batch after {max_retries} retries")
+                                break
+                        else:
+                            raise
             
-            # Commit transaction
             await session.commit()
-            logger.info(f"✅ Saved {len(inserted_ids)} new articles to database")
+            
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            logger.info(f"⚡ Batch insert completed in {elapsed_ms}ms")
+            logger.info(f"✅ Saved {inserted_count} new articles to database")
+            
             return inserted_ids
     
     except Exception as e:
         logger.error(f"❌ Failed to save new articles: {str(e)}")
         return []
+
+
+async def save_new_articles(articles: List[Dict[str, Any]]) -> List[int]:
+    """
+    Legacy function - redirects to optimized batch insert.
+    
+    Kept for backward compatibility with existing code.
+    """
+    return await save_new_articles_batch(articles)
 
 
 async def close_db():
