@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FinNews AI – Real-Time Alerts</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f0f0f 0%, #1a1a2e 100%);
+            color: #ffffff;
+            margin: 0;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            text-align: center;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            background: linear-gradient(90deg, #00d4ff, #00ff88);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #888;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+        
+        .status {
+            text-align: center;
+            padding: 15px;
+            background: rgba(0, 212, 255, 0.1);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            border-radius: 8px;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+        
+        .status.connected {
+            background: rgba(0, 255, 136, 0.1);
+            border-color: rgba(0, 255, 136, 0.3);
+        }
+        
+        .status.disconnected {
+            background: rgba(255, 68, 68, 0.1);
+            border-color: rgba(255, 68, 68, 0.3);
+        }
+        
+        #alerts {
+            display: flex;
+            flex-direction: column-reverse;
+            gap: 15px;
+        }
+        
+        .alert {
+            padding: 20px;
+            border-radius: 12px;
+            background: rgba(17, 17, 17, 0.9);
+            border: 2px solid;
+            animation: slideIn 0.3s ease-out;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .alert::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+        }
+        
+        .alert.HIGH_RISK {
+            border-color: #ff4444;
+        }
+        
+        .alert.HIGH_RISK::before {
+            background: linear-gradient(90deg, #ff4444, #cc0000);
+        }
+        
+        .alert.BULLISH {
+            border-color: #00ff88;
+        }
+        
+        .alert.BULLISH::before {
+            background: linear-gradient(90deg, #00ff88, #00cc66);
+        }
+        
+        .alert.REGULATORY_UPDATE {
+            border-color: #ffaa00;
+        }
+        
+        .alert.REGULATORY_UPDATE::before {
+            background: linear-gradient(90deg, #ffaa00, #ff8800);
+        }
+        
+        .alert.EARNINGS_UPDATE {
+            border-color: #00d4ff;
+        }
+        
+        .alert.EARNINGS_UPDATE::before {
+            background: linear-gradient(90deg, #00d4ff, #0088ff);
+        }
+        
+        .alert-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        
+        .alert-level {
+            font-size: 1.3em;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .alert-time {
+            color: #888;
+            font-size: 0.9em;
+        }
+        
+        .alert-id {
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 8px;
+        }
+        
+        .alert-headline {
+            font-size: 1.1em;
+            line-height: 1.5;
+            margin-bottom: 12px;
+            color: #ddd;
+        }
+        
+        .alert-meta {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .meta-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.9em;
+        }
+        
+        .meta-label {
+            color: #888;
+            margin-right: 6px;
+        }
+        
+        .summary {
+            background: rgba(255, 255, 255, 0.03);
+            padding: 12px;
+            border-radius: 6px;
+            margin-top: 12px;
+            font-style: italic;
+            color: #bbb;
+            border-left: 3px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .no-alerts {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+            font-size: 1.2em;
+        }
+        
+        .emoji {
+            font-size: 1.5em;
+            margin-right: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⚡ FinNews AI – Real-Time Alerts</h1>
+        <div class="subtitle">Trading-Terminal Style Financial News Monitoring</div>
+        
+        <div id="status" class="status">
+            🔌 Connecting to WebSocket...
+        </div>
+        
+        <div id="alerts">
+            <div class="no-alerts">
+                📡 Waiting for alerts...<br>
+                <small>Run the pipeline to generate real-time alerts</small>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const statusDiv = document.getElementById("status");
+        const alertsDiv = document.getElementById("alerts");
+        let alertCount = 0;
+        
+        // Connect to WebSocket
+        const ws = new WebSocket("ws://localhost:8000/ws/alerts");
+        
+        ws.onopen = () => {
+            statusDiv.className = "status connected";
+            statusDiv.innerHTML = "✅ Connected to FinNews AI Alert System";
+        };
+        
+        ws.onclose = () => {
+            statusDiv.className = "status disconnected";
+            statusDiv.innerHTML = "❌ Disconnected from WebSocket";
+        };
+        
+        ws.onerror = (error) => {
+            statusDiv.className = "status disconnected";
+            statusDiv.innerHTML = "⚠️ WebSocket Error - Make sure the server is running on localhost:8000";
+        };
+        
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            
+            // Skip connection messages
+            if (data.type === "connection") {
+                return;
+            }
+            
+            alertCount++;
+            
+            // Remove "no alerts" message
+            const noAlerts = alertsDiv.querySelector('.no-alerts');
+            if (noAlerts) {
+                noAlerts.remove();
+            }
+            
+            // Get emoji based on alert level
+            const emojiMap = {
+                "HIGH_RISK": "🚨",
+                "BULLISH": "📈",
+                "REGULATORY_UPDATE": "🏛️",
+                "EARNINGS_UPDATE": "💰"
+            };
+            
+            const emoji = emojiMap[data.level] || "⚡";
+            const timestamp = new Date().toLocaleTimeString();
+            
+            // Create alert element
+            const alertDiv = document.createElement("div");
+            alertDiv.className = `alert ${data.level}`;
+            
+            let metaHtml = '';
+            
+            // Add sentiment if present
+            if (data.sentiment) {
+                metaHtml += `<div class="meta-item">
+                    <span class="meta-label">Sentiment:</span>
+                    <strong>${data.sentiment}</strong>
+                </div>`;
+            }
+            
+            // Add entities if present
+            if (data.entities) {
+                if (data.entities.companies && data.entities.companies.length > 0) {
+                    metaHtml += `<div class="meta-item">
+                        <span class="meta-label">Companies:</span>
+                        ${data.entities.companies.join(", ")}
+                    </div>`;
+                }
+                if (data.entities.regulators && data.entities.regulators.length > 0) {
+                    metaHtml += `<div class="meta-item">
+                        <span class="meta-label">Regulators:</span>
+                        ${data.entities.regulators.join(", ")}
+                    </div>`;
+                }
+                if (data.entities.sectors && data.entities.sectors.length > 0) {
+                    metaHtml += `<div class="meta-item">
+                        <span class="meta-label">Sectors:</span>
+                        ${data.entities.sectors.join(", ")}
+                    </div>`;
+                }
+            }
+            
+            // Add summary if present
+            let summaryHtml = '';
+            if (data.summary) {
+                summaryHtml = `<div class="summary">
+                    <strong>📝 Summary:</strong> ${data.summary}
+                </div>`;
+            }
+            
+            alertDiv.innerHTML = `
+                <div class="alert-header">
+                    <div class="alert-level">
+                        <span class="emoji">${emoji}</span>
+                        ${data.level.replace(/_/g, ' ')}
+                    </div>
+                    <div class="alert-time">${timestamp}</div>
+                </div>
+                <div class="alert-id">Article ID: ${data.article_id}</div>
+                <div class="alert-headline">${data.headline}</div>
+                ${metaHtml ? `<div class="alert-meta">${metaHtml}</div>` : ''}
+                ${summaryHtml}
+            `;
+            
+            alertsDiv.insertBefore(alertDiv, alertsDiv.firstChild);
+            
+            // Update status with alert count
+            statusDiv.innerHTML = `✅ Connected | ${alertCount} alert${alertCount !== 1 ? 's' : ''} received`;
+            
+            // Keep only last 20 alerts
+            while (alertsDiv.children.length > 20) {
+                alertsDiv.removeChild(alertsDiv.lastChild);
+            }
+        };
+    </script>
+</body>
+</html>

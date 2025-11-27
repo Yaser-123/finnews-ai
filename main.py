@@ -1,6 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket
 import uvicorn
 from api.routes.pipeline import router as pipeline_router
+from api.websocket.alerts import alert_manager
 from database import db
 from contextlib import asynccontextmanager
 
@@ -48,6 +49,25 @@ def health():
 @app.post("/run_graph")
 def run_graph():
     return {"message": "Graph execution placeholder - use /pipeline/run for full pipeline"}
+
+@app.websocket("/ws/alerts")
+async def alerts_socket(websocket: WebSocket):
+    """
+    WebSocket endpoint for real-time trading alerts.
+    
+    Broadcasts alerts for:
+    - HIGH_RISK: Negative sentiment > 0.90
+    - BULLISH: Positive sentiment > 0.90
+    - REGULATORY_UPDATE: RBI/policy/inflation mentions
+    - EARNINGS_UPDATE: Profit/growth mentions
+    """
+    await alert_manager.connect(websocket)
+    try:
+        # Keep connection alive and listen for client messages
+        while True:
+            await websocket.receive_text()
+    except Exception:
+        alert_manager.disconnect(websocket)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

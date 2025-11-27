@@ -178,12 +178,41 @@ async def sentiment_node(state: PipelineState) -> Dict[str, Any]:
         sentiment_articles = sentiment_agent.run(state.unique_articles)
         
         # Save sentiment to database and build sentiment dict
+        from api.websocket.alerts import alert_manager
+        
         sentiment_data = {}
         for article in sentiment_articles:
             article_id = article["id"]
             if "sentiment" in article:
                 sentiment_data[article_id] = article["sentiment"]
                 await db.save_sentiment(article_id, article["sentiment"])
+                
+                # Broadcast real-time alerts for high-confidence sentiment
+                sentiment = article["sentiment"]
+                label = sentiment.get("label", "").upper()
+                score = sentiment.get("score", 0.0)
+                
+                # HIGH_RISK alert: Negative sentiment > 0.90
+                if label == "NEGATIVE" and score > 0.90:
+                    await alert_manager.send_alert(
+                        level="HIGH_RISK",
+                        article_id=article_id,
+                        text=article.get("text", ""),
+                        sentiment=label,
+                        entities=article.get("entities", {})
+                    )
+                    logger.info(f"🚨 HIGH_RISK alert: Article {article_id} (score: {score:.3f})")
+                
+                # BULLISH alert: Positive sentiment > 0.90
+                elif label == "POSITIVE" and score > 0.90:
+                    await alert_manager.send_alert(
+                        level="BULLISH",
+                        article_id=article_id,
+                        text=article.get("text", ""),
+                        sentiment=label,
+                        entities=article.get("entities", {})
+                    )
+                    logger.info(f"📈 BULLISH alert: Article {article_id} (score: {score:.3f})")
         
         state.sentiment = sentiment_data
         state.unique_articles = sentiment_articles
@@ -218,6 +247,8 @@ async def llm_node(state: PipelineState) -> Dict[str, Any]:
     logger.info("🤖 Node: LLM - Generating summaries")
     
     try:
+        from api.websocket.alerts import alert_manager
+        
         agents = get_agents()
         llm_agent = agents["llm"]
         
@@ -227,6 +258,34 @@ async def llm_node(state: PipelineState) -> Dict[str, Any]:
             try:
                 summary = llm_agent.summarize_article(article)
                 summaries.append(summary)
+                
+                # Broadcast alerts based on LLM summary keywords
+                summary_text = summary.get("summary", "").lower()
+                article_id = article["id"]
+                article_text = article.get("text", "")
+                
+                # REGULATORY_UPDATE: RBI, inflation, repo rate mentions
+                if any(keyword in summary_text for keyword in ["repo", "inflation", "rbi", "reserve bank", "monetary policy"]):
+                    await alert_manager.send_alert(
+                        level="REGULATORY_UPDATE",
+                        article_id=article_id,
+                        text=article_text,
+                        summary=summary.get("summary"),
+                        entities=article.get("entities", {})
+                    )
+                    logger.info(f"🏛️ REGULATORY_UPDATE alert: Article {article_id}")
+                
+                # EARNINGS_UPDATE: Profit, growth, earnings mentions
+                if any(keyword in summary_text for keyword in ["profit", "growth", "earnings", "revenue", "dividend"]):
+                    await alert_manager.send_alert(
+                        level="EARNINGS_UPDATE",
+                        article_id=article_id,
+                        text=article_text,
+                        summary=summary.get("summary"),
+                        entities=article.get("entities", {})
+                    )
+                    logger.info(f"💰 EARNINGS_UPDATE alert: Article {article_id}")
+                
             except Exception as e:
                 logger.warning(f"Failed to summarize article {article['id']}: {str(e)}")
         
