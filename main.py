@@ -2,6 +2,7 @@ from fastapi import FastAPI, WebSocket
 import uvicorn
 from api.routes.pipeline import router as pipeline_router
 from api.routes.stats import router as stats_router
+from api.routes.llm import router as llm_router
 from api.scheduler import router as scheduler_router, init_scheduler, shutdown_scheduler
 from api.websocket.alerts import alert_manager
 from database import db
@@ -57,6 +58,7 @@ app = FastAPI(
 app.include_router(pipeline_router, prefix="/pipeline", tags=["Pipeline"])
 app.include_router(scheduler_router, prefix="/scheduler", tags=["Scheduler"])
 app.include_router(stats_router, tags=["Dashboard"])  # No prefix, already has /stats
+app.include_router(llm_router, prefix="/llm", tags=["LLM"])
 
 @app.get("/health")
 def health():

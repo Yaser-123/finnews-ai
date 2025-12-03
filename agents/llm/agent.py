@@ -2,7 +2,13 @@ import google.generativeai as genai
 from google.generativeai import GenerativeModel
 import os
 import json
+import time
 from typing import Dict, Any, List
+
+# Import usage tracking, rate limiting, and safety
+from agents.llm.usage import usage_tracker
+from agents.llm.limiter import rate_limiter, LLMRateLimitError
+from agents.llm.safety import safety_guard, SafetyViolationError
 
 
 class LLMAgent:
@@ -43,6 +49,79 @@ Return your response in JSON format with the following structure:
   "explanation": "detailed explanation"
 }"""
     
+    def _safe_generate(self, prompt: str, max_retries: int = 3, sources: List[str] = None) -> str:
+        """
+        Safely generate content with rate limiting, usage tracking, and safety checks.
+        
+        Args:
+            prompt: The prompt to send to the LLM
+            max_retries: Maximum number of retries on rate limit errors
+            sources: Optional list of source identifiers for citations
+        
+        Returns:
+            Sanitized response text
+        
+        Raises:
+            LLMRateLimitError: If rate limit exceeded after retries
+            SafetyViolationError: If response violates safety rules
+        """
+        retry_count = 0
+        last_error = None
+        
+        while retry_count < max_retries:
+            try:
+                # Check rate limiter
+                rate_limiter.allow_call()
+                
+                # Track start time
+                start_time = time.time()
+                
+                # Generate content
+                response = self.model.generate_content(prompt)
+                response_text = response.text.strip()
+                
+                # Calculate latency
+                latency = time.time() - start_time
+                
+                # Estimate tokens (rough approximation: 1 token ≈ 4 chars)
+                input_tokens = len(prompt) // 4
+                output_tokens = len(response_text) // 4
+                
+                # Record successful call
+                usage_tracker.record_call(input_tokens, output_tokens, latency)
+                rate_limiter.register_call()
+                
+                # Apply safety sanitization
+                sanitized_text = safety_guard.sanitize(response_text, sources=sources)
+                
+                return sanitized_text
+            
+            except LLMRateLimitError as e:
+                usage_tracker.record_failure()
+                last_error = e
+                retry_count += 1
+                
+                if retry_count < max_retries:
+                    # Exponential backoff: 1s, 2s, 4s
+                    wait_time = 2 ** (retry_count - 1)
+                    time.sleep(wait_time)
+                else:
+                    raise
+            
+            except SafetyViolationError:
+                usage_tracker.record_failure()
+                raise
+            
+            except Exception as e:
+                usage_tracker.record_failure()
+                raise
+        
+        # If we exhausted retries
+        if last_error:
+            raise last_error
+        
+        raise Exception("Unexpected error in _safe_generate")
+    
     def expand_query(self, query_dict: Dict[str, str]) -> Dict[str, str]:
         """
         Expand a financial query to improve search relevance.
@@ -59,15 +138,21 @@ Return your response in JSON format with the following structure:
             return {"original": "", "expanded": ""}
         
         try:
-            # Generate expanded query using Gemini
+            # Generate expanded query using safe wrapper
             prompt = f"{self.query_expansion_prompt}\n\nQuery: {original_query}"
-            response = self.model.generate_content(prompt)
-            
-            expanded_query = response.text.strip()
+            expanded_query = self._safe_generate(prompt)
             
             return {
                 "original": original_query,
                 "expanded": expanded_query
+            }
+        
+        except (LLMRateLimitError, SafetyViolationError) as e:
+            # Return original query on rate limit or safety errors
+            return {
+                "original": original_query,
+                "expanded": original_query,
+                "error": str(e)
             }
         
         except Exception as e:
@@ -100,15 +185,21 @@ Return your response in JSON format with the following structure:
             }
         
         try:
-            # Generate summary using Gemini
+            # Generate summary using safe wrapper
             prompt = f"{self.summarization_prompt}\n\nArticle: {text}"
-            response = self.model.generate_content(prompt)
-            
-            summary = response.text.strip()
+            sources = [f"Article ID: {article_id}"]
+            summary = self._safe_generate(prompt, sources=sources)
             
             return {
                 "id": article_id,
                 "summary": summary,
+                "sentiment": sentiment
+            }
+        
+        except (LLMRateLimitError, SafetyViolationError) as e:
+            return {
+                "id": article_id,
+                "summary": f"Unable to generate summary: {str(e)}",
                 "sentiment": sentiment
             }
         
@@ -138,12 +229,9 @@ Return your response in JSON format with the following structure:
             }
         
         try:
-            # Generate regulatory interpretation using Gemini
+            # Generate regulatory interpretation using safe wrapper
             prompt = f"{self.regulation_prompt}\n\nRegulatory Update: {regulatory_text}"
-            response = self.model.generate_content(prompt)
-            
-            # Try to parse JSON response
-            response_text = response.text.strip()
+            response_text = self._safe_generate(prompt)
             
             # Remove markdown code block if present
             if response_text.startswith("```json"):
@@ -160,14 +248,23 @@ Return your response in JSON format with the following structure:
             
             return result
         
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
             # Fallback if JSON parsing fails
             return {
                 "impact": "Unable to parse structured response",
                 "affected_sectors": ["Unknown"],
                 "risk_level": "Unknown",
-                "explanation": response.text.strip() if response else "No response received"
+                "explanation": f"JSON parsing error: {str(e)}"
             }
+        
+        except (LLMRateLimitError, SafetyViolationError) as e:
+            return {
+                "impact": f"Safety/Rate limit error: {str(e)}",
+                "affected_sectors": [],
+                "risk_level": "Unknown",
+                "explanation": ""
+            }
+        
         except Exception as e:
             return {
                 "impact": f"Error analyzing regulation: {str(e)}",
