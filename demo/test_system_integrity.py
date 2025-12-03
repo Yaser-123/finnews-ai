@@ -244,12 +244,13 @@ def test_nlp_pipeline(articles: List[Dict]):
         try:
             from agents.llm.agent import LLMAgent
             llm_agent = LLMAgent()
-            test_article = articles[0] if articles else {"content": "test content"}
-            summary = llm_agent.summarize(test_article.get("content", "")[:1000])
-            has_summary = len(summary) > 10
+            test_article = articles[0] if articles else {"text": "HDFC Bank reports strong Q4 results"}
+            result = llm_agent.summarize_article(test_article)
+            summary = result.get("summary", "")
+            has_summary = len(summary) > 10 and "Error" not in summary
             results.add_result("LLM summaries ok", has_summary, f"{len(summary)} chars")
         except Exception as e:
-            results.add_result("LLM summaries ok", False, "LLM unavailable")
+            results.add_result("LLM summaries ok", False, str(e)[:30])
         
         # Test Embeddings
         from sentence_transformers import SentenceTransformer
