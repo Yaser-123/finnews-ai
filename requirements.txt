@@ -21,3 +21,10 @@ yfinance
 pandas
 matplotlib
 tabulate
+
+# Testing dependencies
+pytest
+pytest-playwright
+pytest-asyncio
+websockets
+requests

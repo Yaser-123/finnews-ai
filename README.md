@@ -738,6 +738,49 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ---
 
+## 🧪 Playwright E2E Tests
+
+End-to-end UI testing with Playwright for comprehensive API and frontend validation.
+
+### Installation
+
+```bash
+pip install pytest pytest-playwright pytest-asyncio websockets
+playwright install
+```
+
+### Run Tests
+
+```bash
+# Run all UI tests
+pytest tests/ui
+
+# Run with verbose output
+pytest tests/ui -v
+
+# Run specific test file
+pytest tests/ui/test_swagger.py
+pytest tests/ui/test_stats_overview.py
+pytest tests/ui/test_query_ui.py
+
+# Run with custom base URL
+pytest tests/ui --base-url=http://localhost:8000
+```
+
+### Test Coverage
+
+- ✅ **Swagger UI** - API documentation accessibility
+- ✅ **Stats Overview** - Dashboard analytics endpoints
+- ✅ **Query API** - NLP agent query processing
+- ✅ **Price Impact** - Historical sentiment-to-price analysis
+- ✅ **WebSocket Alerts** - Real-time alert notifications (optional)
+
+### CI/CD Integration
+
+GitHub Actions workflow automatically runs tests on push and pull requests. See `.github/workflows/ui-tests.yml` for configuration.
+
+---
+
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
