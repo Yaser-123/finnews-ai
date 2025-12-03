@@ -32,7 +32,8 @@ async def get_sentiment_events(
     events = []
     
     try:
-        async with get_session() as session:
+        session = await get_session()
+        try:
             # Calculate date threshold
             date_threshold = datetime.now() - timedelta(days=days_back)
             
@@ -87,6 +88,8 @@ async def get_sentiment_events(
                         'headline': article.title or article.text[:100]
                     })
     
+        finally:
+            await session.close()
     except Exception as e:
         print(f"Error retrieving sentiment events for {symbol}: {e}")
     
@@ -106,7 +109,8 @@ async def get_supported_symbols(limit: int = 50) -> List[str]:
     symbols = []
     
     try:
-        async with get_session() as session:
+        session = await get_session()
+        try:
             # Query entities to find all unique stock symbols
             query = select(Entity.entity_data).limit(1000)
             result = await session.execute(query)
@@ -134,6 +138,8 @@ async def get_supported_symbols(limit: int = 50) -> List[str]:
                     break
             
             symbols = sorted(list(symbol_set))[:limit]
+        finally:
+            await session.close()
     
     except Exception as e:
         print(f"Error retrieving supported symbols: {e}")
