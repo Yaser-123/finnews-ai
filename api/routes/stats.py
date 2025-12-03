@@ -44,12 +44,21 @@ class AlertSummary(BaseModel):
     timestamp: str
 
 
+class ImpactModelSummary(BaseModel):
+    supported_symbols: List[str]
+    symbol_count: int
+    last_run: str
+    recent_avg_positive_return: float
+    recent_avg_negative_return: float
+
+
 class DashboardOverview(BaseModel):
     total_articles: int
     unique_clusters: int
     sentiment: SentimentDistribution
     alerts_last_10: List[AlertSummary]
     top_companies: List[CompanyCount]
+    impact_model: ImpactModelSummary
     updated_at: str
 
 
@@ -141,6 +150,46 @@ async def get_dashboard_overview():
                 "timestamp": alert.get("timestamp", datetime.now().isoformat())
             })
         
+        # METRIC 6: Impact Model Summary (lightweight)
+        # Get top 5 symbols and compute lightweight summary
+        impact_summary = {
+            "supported_symbols": [],
+            "symbol_count": 0,
+            "last_run": datetime.now().isoformat(),
+            "recent_avg_positive_return": 0.0,
+            "recent_avg_negative_return": 0.0
+        }
+        
+        try:
+            from analysis.helpers import get_supported_symbols
+            
+            # Get limited symbols to avoid slowdown
+            symbols = await get_supported_symbols(limit=10)
+            impact_summary["supported_symbols"] = symbols[:5]  # Only show top 5
+            impact_summary["symbol_count"] = len(symbols)
+            
+            # For demo: compute quick avg from recent sentiment scores
+            # (actual backtest would be too slow for dashboard)
+            result = await session.execute(
+                select(
+                    Sentiment.label,
+                    func.avg(Sentiment.score)
+                ).where(
+                    Sentiment.label.in_(['positive', 'negative'])
+                ).group_by(Sentiment.label)
+            )
+            sentiment_avgs = result.fetchall()
+            
+            for label, avg_score in sentiment_avgs:
+                if label == 'positive':
+                    # Approximate return from sentiment score (demo heuristic)
+                    impact_summary["recent_avg_positive_return"] = round(float(avg_score) * 0.05, 4)
+                elif label == 'negative':
+                    impact_summary["recent_avg_negative_return"] = round(float(avg_score) * -0.03, 4)
+        
+        except Exception as e:
+            logger.warning(f"Could not compute impact model summary: {e}")
+        
         # Prepare response
         overview = {
             "total_articles": total_articles,
@@ -148,6 +197,7 @@ async def get_dashboard_overview():
             "sentiment": sentiment_dist,
             "alerts_last_10": alerts_last_10,
             "top_companies": top_companies,
+            "impact_model": impact_summary,
             "updated_at": datetime.now().isoformat()
         }
         
@@ -166,6 +216,13 @@ async def get_dashboard_overview():
             "sentiment": {"positive": 0, "negative": 0, "neutral": 0},
             "alerts_last_10": [],
             "top_companies": [],
+            "impact_model": {
+                "supported_symbols": [],
+                "symbol_count": 0,
+                "last_run": datetime.now().isoformat(),
+                "recent_avg_positive_return": 0.0,
+                "recent_avg_negative_return": 0.0
+            },
             "updated_at": datetime.now().isoformat()
         }
 

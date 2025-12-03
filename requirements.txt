@@ -17,3 +17,7 @@ python-dotenv
 alembic
 feedparser
 apscheduler
+yfinance
+pandas
+matplotlib
+tabulate
