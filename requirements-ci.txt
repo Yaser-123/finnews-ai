@@ -1,0 +1,43 @@
+# Lightweight requirements for CI/CD - CPU-only, no CUDA
+# Core API
+fastapi
+uvicorn[standard]
+httpx
+python-dotenv
+
+# Database
+sqlalchemy[asyncio]
+asyncpg
+psycopg2-binary
+alembic
+
+# Data processing
+numpy
+pandas
+scikit-learn
+
+# ML/NLP - CPU-only versions (no CUDA dependencies)
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.1.0+cpu
+sentence-transformers
+transformers
+spacy
+
+# LLM & Vector DB
+google-generativeai
+chromadb
+langgraph
+
+# Utilities
+feedparser
+apscheduler
+yfinance
+matplotlib
+tabulate
+
+# Testing
+pytest
+pytest-playwright
+pytest-asyncio
+websockets
+requests
