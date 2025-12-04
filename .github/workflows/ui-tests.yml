@@ -1,36 +1,88 @@
 name: UI Tests (Playwright)
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
 
 jobs:
   ui-tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
-    - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Install Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: "3.10"
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
 
-    - name: Install dependencies
-      run: |
-        pip install -r requirements.txt
-        pip install pytest pytest-playwright pytest-asyncio websockets
-        playwright install --with-deps chromium
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-    - name: Start FastAPI server
-      run: |
-        uvicorn main:app --port 8000 &
-        sleep 10
+      - name: Install Playwright browsers
+        run: |
+          pip install pytest-playwright
+          playwright install chromium
+          playwright install-deps chromium
 
-    - name: Run Playwright Tests
-      run: pytest tests/ui -v --tb=short
+      - name: Start FastAPI server
+        run: |
+          nohup python -m uvicorn main:app --host 127.0.0.1 --port 8000 > server.log 2>&1 &
+          echo $! > server.pid
+          echo "Server started with PID $(cat server.pid)"
 
-    - name: Upload test results
-      if: always()
-      uses: actions/upload-artifact@v3
-      with:
-        name: playwright-test-results
-        path: test-results/
+      - name: Wait for server to be ready
+        run: |
+          echo "Waiting for server to start..."
+          max_attempts=30
+          attempt=0
+          
+          while [ $attempt -lt $max_attempts ]; do
+            if curl -s -f http://127.0.0.1:8000/docs > /dev/null 2>&1; then
+              echo "✅ Server is ready!"
+              curl -s http://127.0.0.1:8000/docs | head -n 5
+              exit 0
+            fi
+            
+            attempt=$((attempt + 1))
+            echo "Attempt $attempt/$max_attempts - Server not ready yet..."
+            sleep 1
+          done
+          
+          echo "❌ Server failed to start within 30 seconds"
+          echo "=== Server Logs ==="
+          cat server.log
+          exit 1
+
+      - name: Run Playwright UI tests
+        run: |
+          pytest tests/ui/ -v --tb=short
+
+      - name: Show server logs on failure
+        if: failure()
+        run: |
+          echo "=== FastAPI Server Logs ==="
+          cat server.log || echo "No server logs found"
+
+      - name: Stop server
+        if: always()
+        run: |
+          if [ -f server.pid ]; then
+            kill $(cat server.pid) || true
+            echo "Server stopped"
+          fi
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: test-results/
