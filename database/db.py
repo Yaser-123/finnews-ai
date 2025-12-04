@@ -47,12 +47,18 @@ engine = None
 async_session_factory = None
 
 
+def is_disabled():
+    """Check if database is disabled (no DATABASE_URL or DB_DISABLED=1)."""
+    db_disabled = os.getenv("DB_DISABLED", "0") == "1"
+    return not DATABASE_URL or db_disabled
+
+
 def init_db():
     """Initialize database engine and session factory."""
     global engine, async_session_factory
     
-    if not DATABASE_URL:
-        logger.warning("DATABASE_URL not set. Database operations will be skipped.")
+    if is_disabled():
+        logger.warning("DATABASE_URL not set or DB_DISABLED=1. Database operations will be skipped.")
         return
     
     try:

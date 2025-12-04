@@ -282,6 +282,18 @@ async def query_articles(request: QueryRequest):
     **Note:** Pipeline must be run first to index articles. Call `POST /pipeline/run` to initialize.
     """
     try:
+        # Check if database is disabled (CI mode)
+        if db.is_disabled():
+            return {
+                "query": request.query,
+                "expanded_query": None,
+                "matched_entities": {},
+                "results": [],
+                "result_count": 0,
+                "summary": "Mock response (database disabled)",
+                "pipeline": "mock"
+            }
+        
         # Ensure pipeline has been run
         if _pipeline_status["status"] == "not run":
             raise HTTPException(
@@ -387,6 +399,18 @@ async def query_with_langgraph(request: QueryRequest):
         Query results with matched entities and ranked articles
     """
     try:
+        # Check if database is disabled (CI mode)
+        if db.is_disabled():
+            return {
+                "query": request.query,
+                "expanded_query": None,
+                "matched_entities": {},
+                "results": [],
+                "result_count": 0,
+                "summary": "Mock response (database disabled)",
+                "pipeline": "mock"
+            }
+        
         # Ensure pipeline has been run
         if _pipeline_status["status"] == "not run":
             raise HTTPException(
