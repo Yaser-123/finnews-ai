@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FinNews AI - Intelligent Financial News Search</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .search-box {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            margin-bottom: 30px;
+        }
+
+        .search-input-wrapper {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .search-input {
+            flex: 1;
+            padding: 15px 20px;
+            font-size: 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            outline: none;
+            transition: all 0.3s;
+        }
+
+        .search-input:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .search-btn {
+            padding: 15px 40px;
+            font-size: 16px;
+            font-weight: bold;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .search-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .search-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .examples {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .example-chip {
+            padding: 8px 15px;
+            background: #f0f0f0;
+            border-radius: 20px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .example-chip:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .pipeline-viz {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            margin-bottom: 30px;
+            display: none;
+        }
+
+        .pipeline-viz.active {
+            display: block;
+        }
+
+        .pipeline-step {
+            display: flex;
+            align-items: center;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 10px;
+            background: #f8f9fa;
+            opacity: 0.3;
+            transition: all 0.5s;
+        }
+
+        .pipeline-step.active {
+            opacity: 1;
+            background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+            border-left: 4px solid #667eea;
+        }
+
+        .pipeline-step.completed {
+            opacity: 1;
+            background: #e8f5e9;
+            border-left: 4px solid #4caf50;
+        }
+
+        .step-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            margin-right: 20px;
+            background: white;
+        }
+
+        .step-content {
+            flex: 1;
+        }
+
+        .step-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #333;
+        }
+
+        .step-description {
+            font-size: 14px;
+            color: #666;
+        }
+
+        .step-status {
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .status-waiting {
+            background: #f0f0f0;
+            color: #999;
+        }
+
+        .status-processing {
+            background: #fff3e0;
+            color: #f57c00;
+            animation: pulse 1.5s infinite;
+        }
+
+        .status-completed {
+            background: #e8f5e9;
+            color: #4caf50;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .results-section {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            display: none;
+        }
+
+        .results-section.active {
+            display: block;
+        }
+
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .results-header h2 {
+            color: #333;
+        }
+
+        .results-count {
+            background: #667eea;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+        }
+
+        .matched-entities {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .matched-entities h3 {
+            font-size: 16px;
+            margin-bottom: 10px;
+            color: #555;
+        }
+
+        .entity-tags {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .entity-tag {
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .entity-company {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .entity-sector {
+            background: #f3e5f5;
+            color: #7b1fa2;
+        }
+
+        .entity-regulator {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+
+        .article-card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-left: 4px solid #667eea;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .article-card:hover {
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            transform: translateX(5px);
+        }
+
+        .article-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .article-id {
+            font-size: 12px;
+            color: #999;
+            font-weight: bold;
+        }
+
+        .article-score {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .score-bar {
+            width: 100px;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .score-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4caf50, #8bc34a);
+            transition: width 0.5s;
+        }
+
+        .score-text {
+            font-size: 14px;
+            font-weight: bold;
+            color: #4caf50;
+        }
+
+        .article-text {
+            font-size: 15px;
+            color: #333;
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+
+        .article-metadata {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .metadata-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 13px;
+            color: #666;
+        }
+
+        .sentiment-badge {
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .sentiment-positive {
+            background: #e8f5e9;
+            color: #4caf50;
+        }
+
+        .sentiment-negative {
+            background: #ffebee;
+            color: #f44336;
+        }
+
+        .sentiment-neutral {
+            background: #e0e0e0;
+            color: #757575;
+        }
+
+        .article-entities {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .entity-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 5px;
+            font-size: 13px;
+        }
+
+        .entity-label {
+            font-weight: bold;
+            color: #666;
+            min-width: 80px;
+        }
+
+        .entity-values {
+            color: #333;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #f0f0f0;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            background: #ffebee;
+            color: #c62828;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .error-message.active {
+            display: block;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🤖 FinNews AI</h1>
+            <p>Intelligent Financial News Search with Multi-Agent Pipeline</p>
+            <div id="systemStatus" style="margin-top: 15px; padding: 10px; background: rgba(255,255,255,0.2); border-radius: 10px; font-size: 14px;">
+                <span id="statusText">🔄 Checking system status...</span>
+            </div>
+        </div>
+
+        <!-- Search Box -->
+        <div class="search-box">
+            <div class="search-input-wrapper">
+                <input 
+                    type="text" 
+                    class="search-input" 
+                    id="searchInput" 
+                    placeholder="Search financial news... (e.g., HDFC Bank dividend, RBI policy, Stock market)"
+                >
+                <button class="search-btn" id="searchBtn">🔍 Search</button>
+            </div>
+            <div class="examples">
+                <span style="font-size: 14px; color: #666; margin-right: 10px;">Try:</span>
+                <div class="example-chip" data-query="HDFC Bank dividend">HDFC Bank dividend</div>
+                <div class="example-chip" data-query="RBI monetary policy">RBI monetary policy</div>
+                <div class="example-chip" data-query="Indian banking sector">Indian banking sector</div>
+                <div class="example-chip" data-query="Stock market today">Stock market today</div>
+            </div>
+        </div>
+
+        <!-- Pipeline Visualization -->
+        <div class="pipeline-viz" id="pipelineViz">
+            <h2 style="margin-bottom: 20px; color: #333;">🔄 Processing Pipeline</h2>
+            
+            <div class="pipeline-step" data-step="1">
+                <div class="step-icon">📝</div>
+                <div class="step-content">
+                    <div class="step-title">Step 1: Query Analysis</div>
+                    <div class="step-description">Extracting entities from your query using NLP (spaCy)</div>
+                </div>
+                <span class="step-status status-waiting">Waiting</span>
+            </div>
+
+            <div class="pipeline-step" data-step="2">
+                <div class="step-icon">🧬</div>
+                <div class="step-content">
+                    <div class="step-title">Step 2: Embedding Generation</div>
+                    <div class="step-description">Converting query to 768-dimensional vector using Sentence Transformers</div>
+                </div>
+                <span class="step-status status-waiting">Waiting</span>
+            </div>
+
+            <div class="pipeline-step" data-step="3">
+                <div class="step-icon">🔍</div>
+                <div class="step-content">
+                    <div class="step-title">Step 3: Semantic Search</div>
+                    <div class="step-description">Searching ChromaDB vector database for similar articles</div>
+                </div>
+                <span class="step-status status-waiting">Waiting</span>
+            </div>
+
+            <div class="pipeline-step" data-step="4">
+                <div class="step-icon">💾</div>
+                <div class="step-content">
+                    <div class="step-title">Step 4: Database Retrieval</div>
+                    <div class="step-description">Fetching full articles from PostgreSQL with metadata</div>
+                </div>
+                <span class="step-status status-waiting">Waiting</span>
+            </div>
+
+            <div class="pipeline-step" data-step="5">
+                <div class="step-icon">🏢</div>
+                <div class="step-content">
+                    <div class="step-title">Step 5: Entity Matching</div>
+                    <div class="step-description">Boosting scores for articles matching companies, sectors, regulators</div>
+                </div>
+                <span class="step-status status-waiting">Waiting</span>
+            </div>
+
+            <div class="pipeline-step" data-step="6">
+                <div class="step-icon">😊</div>
+                <div class="step-content">
+                    <div class="step-title">Step 6: Sentiment Analysis</div>
+                    <div class="step-description">Analyzing financial sentiment using FinBERT model</div>
+                </div>
+                <span class="step-status status-waiting">Waiting</span>
+            </div>
+
+            <div class="pipeline-step" data-step="7">
+                <div class="step-icon">📊</div>
+                <div class="step-content">
+                    <div class="step-title">Step 7: Result Ranking</div>
+                    <div class="step-description">Sorting by relevance score (semantic + entity match)</div>
+                </div>
+                <span class="step-status status-waiting">Waiting</span>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div class="results-section" id="resultsSection">
+            <div class="results-header">
+                <h2>📰 Search Results</h2>
+                <span class="results-count" id="resultsCount">0 articles</span>
+            </div>
+
+            <!-- Stats -->
+            <div class="stats-grid" id="statsGrid" style="display: none;">
+                <div class="stat-card">
+                    <div class="stat-value" id="statArticles">0</div>
+                    <div class="stat-label">Articles Found</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="statAvgScore">0.0</div>
+                    <div class="stat-label">Avg Relevance</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="statEntities">0</div>
+                    <div class="stat-label">Entities Matched</div>
+                </div>
+            </div>
+
+            <!-- Matched Entities -->
+            <div class="matched-entities" id="matchedEntities" style="display: none;">
+                <h3>🎯 Matched Entities from Query:</h3>
+                <div class="entity-tags" id="entityTags"></div>
+            </div>
+
+            <!-- Articles -->
+            <div id="articlesContainer"></div>
+        </div>
+
+        <!-- Error Message -->
+        <div class="error-message" id="errorMessage"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://127.0.0.1:8000';
+        
+        // DOM Elements
+        const searchInput = document.getElementById('searchInput');
+        const searchBtn = document.getElementById('searchBtn');
+        const pipelineViz = document.getElementById('pipelineViz');
+        const resultsSection = document.getElementById('resultsSection');
+        const errorMessage = document.getElementById('errorMessage');
+        const articlesContainer = document.getElementById('articlesContainer');
+        const matchedEntities = document.getElementById('matchedEntities');
+        const entityTags = document.getElementById('entityTags');
+        const resultsCount = document.getElementById('resultsCount');
+        const statsGrid = document.getElementById('statsGrid');
+
+        // Example queries
+        document.querySelectorAll('.example-chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                searchInput.value = chip.dataset.query;
+                performSearch();
+            });
+        });
+
+        // Search on Enter key
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                performSearch();
+            }
+        });
+
+        // Search button click
+        searchBtn.addEventListener('click', performSearch);
+
+        async function performSearch() {
+            const query = searchInput.value.trim();
+            
+            if (!query) {
+                showError('Please enter a search query');
+                return;
+            }
+
+            // Reset UI
+            errorMessage.classList.remove('active');
+            resultsSection.classList.remove('active');
+            pipelineViz.classList.add('active');
+            resetPipeline();
+
+            // Disable search button
+            searchBtn.disabled = true;
+            searchBtn.textContent = '🔄 Searching...';
+
+            try {
+                // Simulate pipeline steps with delays for visualization
+                await simulatePipelineSteps();
+
+                // Make actual API call
+                let response = await fetch(`${API_BASE}/pipeline/query`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        query: query,
+                        top_k: 10
+                    })
+                });
+
+                // If pipeline not initialized (400 error), initialize it first
+                if (response.status === 400) {
+                    console.log('Pipeline not initialized, running initialization...');
+                    searchBtn.textContent = '⚙️ Initializing...';
+                    
+                    // Run pipeline to initialize
+                    const initResponse = await fetch(`${API_BASE}/pipeline/run`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({})
+                    });
+                    
+                    if (!initResponse.ok) {
+                        throw new Error('Failed to initialize pipeline');
+                    }
+                    
+                    // Wait a bit for initialization
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    
+                    // Retry the query
+                    searchBtn.textContent = '🔄 Searching...';
+                    response = await fetch(`${API_BASE}/pipeline/query`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            query: query,
+                            top_k: 10
+                        })
+                    });
+                }
+
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                // Complete all pipeline steps
+                completeAllSteps();
+
+                // Display results
+                await new Promise(resolve => setTimeout(resolve, 500));
+                displayResults(data);
+
+            } catch (error) {
+                console.error('Search error:', error);
+                showError(`Search failed: ${error.message}. Make sure the server is running on ${API_BASE}`);
+                pipelineViz.classList.remove('active');
+            } finally {
+                searchBtn.disabled = false;
+                searchBtn.textContent = '🔍 Search';
+            }
+        }
+
+        function resetPipeline() {
+            document.querySelectorAll('.pipeline-step').forEach(step => {
+                step.classList.remove('active', 'completed');
+                const status = step.querySelector('.step-status');
+                status.className = 'step-status status-waiting';
+                status.textContent = 'Waiting';
+            });
+        }
+
+        async function simulatePipelineSteps() {
+            const steps = document.querySelectorAll('.pipeline-step');
+            
+            for (let i = 0; i < steps.length; i++) {
+                const step = steps[i];
+                const status = step.querySelector('.step-status');
+                
+                // Mark as processing
+                step.classList.add('active');
+                status.className = 'step-status status-processing';
+                status.textContent = 'Processing...';
+                
+                // Wait
+                await new Promise(resolve => setTimeout(resolve, 300));
+                
+                // Mark as completed
+                step.classList.remove('active');
+                step.classList.add('completed');
+                status.className = 'step-status status-completed';
+                status.textContent = '✓ Done';
+            }
+        }
+
+        function completeAllSteps() {
+            document.querySelectorAll('.pipeline-step').forEach(step => {
+                step.classList.remove('active');
+                step.classList.add('completed');
+                const status = step.querySelector('.step-status');
+                status.className = 'step-status status-completed';
+                status.textContent = '✓ Done';
+            });
+        }
+
+        function displayResults(data) {
+            // Show results section
+            resultsSection.classList.add('active');
+
+            // Update count
+            resultsCount.textContent = `${data.results.length} articles`;
+
+            // Display matched entities
+            if (hasEntities(data.matched_entities)) {
+                matchedEntities.style.display = 'block';
+                entityTags.innerHTML = '';
+                
+                if (data.matched_entities.companies && data.matched_entities.companies.length > 0) {
+                    data.matched_entities.companies.forEach(company => {
+                        entityTags.innerHTML += `<span class="entity-tag entity-company">🏢 ${company}</span>`;
+                    });
+                }
+                
+                if (data.matched_entities.sectors && data.matched_entities.sectors.length > 0) {
+                    data.matched_entities.sectors.forEach(sector => {
+                        entityTags.innerHTML += `<span class="entity-tag entity-sector">📊 ${sector}</span>`;
+                    });
+                }
+                
+                if (data.matched_entities.regulators && data.matched_entities.regulators.length > 0) {
+                    data.matched_entities.regulators.forEach(regulator => {
+                        entityTags.innerHTML += `<span class="entity-tag entity-regulator">⚖️ ${regulator}</span>`;
+                    });
+                }
+            } else {
+                matchedEntities.style.display = 'none';
+            }
+
+            // Display stats
+            if (data.results.length > 0) {
+                statsGrid.style.display = 'grid';
+                document.getElementById('statArticles').textContent = data.results.length;
+                
+                const avgScore = data.results.reduce((sum, r) => sum + r.score, 0) / data.results.length;
+                document.getElementById('statAvgScore').textContent = avgScore.toFixed(3);
+                
+                const totalEntities = countTotalEntities(data.matched_entities);
+                document.getElementById('statEntities').textContent = totalEntities;
+            }
+
+            // Display articles
+            articlesContainer.innerHTML = '';
+            
+            if (data.results.length === 0) {
+                articlesContainer.innerHTML = '<p style="text-align: center; color: #999; padding: 40px;">No articles found matching your query.</p>';
+                return;
+            }
+
+            data.results.forEach(article => {
+                const card = createArticleCard(article);
+                articlesContainer.appendChild(card);
+            });
+        }
+
+        function createArticleCard(article) {
+            const card = document.createElement('div');
+            card.className = 'article-card';
+            
+            const scorePercent = (article.score * 100).toFixed(0);
+            
+            let sentimentBadge = '';
+            if (article.sentiment) {
+                const sentimentClass = `sentiment-${article.sentiment.label}`;
+                const sentimentEmoji = article.sentiment.label === 'positive' ? '📈' : 
+                                      article.sentiment.label === 'negative' ? '📉' : '📊';
+                sentimentBadge = `
+                    <div class="metadata-item">
+                        <span class="sentiment-badge ${sentimentClass}">
+                            ${sentimentEmoji} ${article.sentiment.label.toUpperCase()} 
+                            (${(article.sentiment.score * 100).toFixed(0)}%)
+                        </span>
+                    </div>
+                `;
+            }
+
+            let entitiesHtml = '';
+            if (article.entities) {
+                const hasCompanies = article.entities.companies && article.entities.companies.length > 0;
+                const hasSectors = article.entities.sectors && article.entities.sectors.length > 0;
+                const hasRegulators = article.entities.regulators && article.entities.regulators.length > 0;
+                const hasEvents = article.entities.events && article.entities.events.length > 0;
+
+                if (hasCompanies || hasSectors || hasRegulators || hasEvents) {
+                    entitiesHtml = '<div class="article-entities">';
+                    
+                    if (hasCompanies) {
+                        entitiesHtml += `
+                            <div class="entity-row">
+                                <span class="entity-label">🏢 Companies:</span>
+                                <span class="entity-values">${article.entities.companies.join(', ')}</span>
+                            </div>
+                        `;
+                    }
+                    
+                    if (hasSectors) {
+                        entitiesHtml += `
+                            <div class="entity-row">
+                                <span class="entity-label">📊 Sectors:</span>
+                                <span class="entity-values">${article.entities.sectors.join(', ')}</span>
+                            </div>
+                        `;
+                    }
+                    
+                    if (hasRegulators) {
+                        entitiesHtml += `
+                            <div class="entity-row">
+                                <span class="entity-label">⚖️ Regulators:</span>
+                                <span class="entity-values">${article.entities.regulators.join(', ')}</span>
+                            </div>
+                        `;
+                    }
+                    
+                    if (hasEvents) {
+                        entitiesHtml += `
+                            <div class="entity-row">
+                                <span class="entity-label">📅 Events:</span>
+                                <span class="entity-values">${article.entities.events.join(', ')}</span>
+                            </div>
+                        `;
+                    }
+                    
+                    entitiesHtml += '</div>';
+                }
+            }
+
+            card.innerHTML = `
+                <div class="article-header">
+                    <span class="article-id">Article #${article.id}</span>
+                    <div class="article-score">
+                        <div class="score-bar">
+                            <div class="score-fill" style="width: ${scorePercent}%"></div>
+                        </div>
+                        <span class="score-text">${article.score.toFixed(3)}</span>
+                    </div>
+                </div>
+                <div class="article-text">${article.text}</div>
+                <div class="article-metadata">
+                    ${sentimentBadge}
+                    <div class="metadata-item">
+                        <span>🎯 Relevance: ${scorePercent}%</span>
+                    </div>
+                </div>
+                ${entitiesHtml}
+            `;
+
+            return card;
+        }
+
+        function hasEntities(entities) {
+            return (entities.companies && entities.companies.length > 0) ||
+                   (entities.sectors && entities.sectors.length > 0) ||
+                   (entities.regulators && entities.regulators.length > 0);
+        }
+
+        function countTotalEntities(entities) {
+            let count = 0;
+            if (entities.companies) count += entities.companies.length;
+            if (entities.sectors) count += entities.sectors.length;
+            if (entities.regulators) count += entities.regulators.length;
+            return count;
+        }
+
+        function showError(message) {
+            errorMessage.textContent = '❌ ' + message;
+            errorMessage.classList.add('active');
+            setTimeout(() => {
+                errorMessage.classList.remove('active');
+            }, 5000);
+        }
+
+        // Check system status on load
+        async function checkSystemStatus() {
+            const statusText = document.getElementById('statusText');
+            
+            try {
+                // Check if server is running
+                const healthResponse = await fetch(`${API_BASE}/health`);
+                if (!healthResponse.ok) {
+                    throw new Error('Server not responding');
+                }
+                
+                // Check pipeline status
+                const statusResponse = await fetch(`${API_BASE}/pipeline/status`);
+                const statusData = await statusResponse.json();
+                
+                if (statusData.status === 'not run') {
+                    statusText.innerHTML = '⚠️ System ready - Pipeline will auto-initialize on first search';
+                    statusText.style.background = 'rgba(255, 193, 7, 0.3)';
+                } else {
+                    statusText.innerHTML = '✅ System ready - ChromaDB indexed with articles';
+                    statusText.style.background = 'rgba(76, 175, 80, 0.3)';
+                }
+            } catch (error) {
+                statusText.innerHTML = '❌ Server not responding - Please start the backend server';
+                statusText.style.background = 'rgba(244, 67, 54, 0.3)';
+                searchBtn.disabled = true;
+            }
+        }
+
+        // Run status check on page load
+        checkSystemStatus();
+
+        // Initial message
+        console.log('FinNews AI Dashboard loaded. Server: ' + API_BASE);
+    </script>
+</body>
+</html>

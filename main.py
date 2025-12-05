@@ -1,4 +1,6 @@
 from fastapi import FastAPI, WebSocket
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 import uvicorn
 from api.routes.pipeline import router as pipeline_router
 from api.routes.stats import router as stats_router
@@ -8,6 +10,7 @@ from api.scheduler import router as scheduler_router, init_scheduler, shutdown_s
 from api.websocket.alerts import alert_manager
 from database import db
 from contextlib import asynccontextmanager
+import os
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -61,6 +64,12 @@ app.include_router(scheduler_router, prefix="/scheduler", tags=["Scheduler"])
 app.include_router(stats_router, tags=["Dashboard"])  # No prefix, already has /stats
 app.include_router(llm_router, prefix="/llm", tags=["LLM"])
 app.include_router(analysis_router, prefix="/analysis", tags=["Analysis"])
+
+@app.get("/")
+def root():
+    """Serve the dashboard HTML"""
+    dashboard_path = os.path.join(os.path.dirname(__file__), "dashboard.html")
+    return FileResponse(dashboard_path)
 
 @app.get("/health")
 def health():

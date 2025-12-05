@@ -36,6 +36,32 @@ class EntityAgent:
         self.regulators = {"RBI", "SEBI", "Reserve Bank of India", "Securities and Exchange Board"}
         self.sectors = {"banking", "technology", "pharma", "auto", "finance", "insurance"}
         self.event_keywords = {"dividend", "merger", "acquisition", "IPO", "earnings", "profit", "loss"}
+        
+        # Company-to-sector mapping for major Indian companies
+        self.company_sectors = {
+            "hdfc": "Banking",
+            "icici": "Banking",
+            "sbi": "Banking",
+            "axis": "Banking",
+            "kotak": "Banking",
+            "indusind": "Banking",
+            "tcs": "Technology",
+            "infosys": "Technology",
+            "wipro": "Technology",
+            "hcl": "Technology",
+            "tech mahindra": "Technology",
+            "reliance": "Finance",
+            "adani": "Finance",
+            "tata": "Auto",
+            "mahindra": "Auto",
+            "maruti": "Auto",
+            "bajaj": "Auto",
+            "dr reddy": "Pharma",
+            "sun pharma": "Pharma",
+            "cipla": "Pharma",
+            "lupin": "Pharma",
+            "divi": "Pharma"
+        }
     
     def extract_entities(self, text):
         """
@@ -79,6 +105,14 @@ class EntityAgent:
         for sector in self.sectors:
             if sector in text_lower:
                 entities["sectors"].append(sector.title())
+        
+        # Infer sectors from company names
+        for company in entities["companies"]:
+            company_lower = company.lower()
+            for keyword, sector in self.company_sectors.items():
+                if keyword in company_lower:
+                    entities["sectors"].append(sector)
+                    break  # Only add one sector per company
         
         # Extract event keywords
         for event in self.event_keywords:

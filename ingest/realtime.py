@@ -71,31 +71,6 @@ def get_configured_feeds() -> List[str]:
     return DEFAULT_FEEDS
 
 
-def generate_article_id(feed_url: str, guid: str, published: str) -> int:
-    """
-    Generate deterministic article ID using SHA-1 hash.
-    
-    Args:
-        feed_url: Source feed URL
-        guid: Entry GUID or unique identifier
-        published: Published timestamp in ISO format
-    
-    Returns:
-        Integer ID (15 hex digits converted to int)
-    """
-    # Create unique string combining feed, guid, and timestamp
-    unique_str = f"{feed_url}|{guid}|{published}"
-    
-    # Generate SHA-1 hash
-    hash_obj = hashlib.sha1(unique_str.encode('utf-8'))
-    hash_hex = hash_obj.hexdigest()
-    
-    # Convert first 15 hex digits to int (stays within safe int range)
-    article_id = int(hash_hex[:15], 16)
-    
-    return article_id
-
-
 def normalize_entry(feed_url: str, entry: Any) -> Optional[Dict[str, Any]]:
     """
     Normalize RSS feed entry to article dict with HTML cleanup and hash.
@@ -158,12 +133,8 @@ def normalize_entry(feed_url: str, entry: Any) -> Optional[Dict[str, Any]]:
         if not published_dt:
             published_dt = datetime.now(timezone.utc).replace(tzinfo=None)
         
-        # Generate deterministic ID using ISO format
-        published_iso = published_dt.isoformat()
-        article_id = generate_article_id(feed_url, guid, published_iso)
-        
+        # Let database auto-generate ID (hash field handles deduplication)
         return {
-            "id": article_id,
             "title": title_clean,
             "text": text,
             "source": feed_url,
@@ -275,36 +246,27 @@ async def fetch_all(feeds: Optional[List[str]] = None) -> List[Dict[str, Any]]:
     
     logger.info(f"📦 Fetched {len(all_articles)} articles from {successful_feeds}/{len(feeds)} feeds")
     
-    # UPGRADE #2: In-memory deduplication BEFORE database
+    # UPGRADE #2: In-memory deduplication BEFORE database (hash-based only)
     # This reduces database queries by 90-95% for duplicate articles
-    seen_ids: Set[int] = set()
     seen_hashes: Set[str] = set()
     deduplicated = []
-    id_duplicates = 0
     hash_duplicates = 0
     
     for article in all_articles:
-        # Skip if duplicate by ID
-        if article['id'] in seen_ids:
-            id_duplicates += 1
-            continue
-        
-        # Skip if duplicate by content hash (most important for dedup)
+        # Skip if duplicate by content hash (deduplication key)
         article_hash = article.get('hash', '')
         if article_hash and article_hash in seen_hashes:
             hash_duplicates += 1
             continue
         
         # Add to results (only truly unique articles)
-        seen_ids.add(article['id'])
         if article_hash:
             seen_hashes.add(article_hash)
         deduplicated.append(article)
     
     # UPGRADE #7: Clean demo logs for hackathon judges
-    total_duplicates = id_duplicates + hash_duplicates
-    if total_duplicates > 0:
-        logger.info(f"🧹 Removed {total_duplicates} duplicates (in-memory: {id_duplicates} ID + {hash_duplicates} content)")
+    if hash_duplicates > 0:
+        logger.info(f"🧹 Removed {hash_duplicates} duplicates (in-memory hash-based dedup)")
     
     all_articles = deduplicated
     

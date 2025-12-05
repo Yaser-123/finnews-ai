@@ -24,7 +24,7 @@ class Article(Base):
         UniqueConstraint("hash", name="uq_article_hash"),
     )
     
-    id = Column(BigInteger, primary_key=True, autoincrement=False)
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
     text = Column(Text, nullable=False)
     source = Column(Text, nullable=True)
     published_at = Column(DateTime, nullable=True, default=func.now())

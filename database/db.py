@@ -220,13 +220,16 @@ async def save_articles(articles: List[Dict[str, Any]]) -> int:
                 # Prepare batch data
                 batch_data = []
                 for article in batch:
-                    batch_data.append({
-                        "id": article.get("id"),
+                    data = {
                         "text": article.get("text", ""),
                         "source": article.get("source"),
                         "published_at": article.get("published_at"),
                         "hash": article.get("hash")
-                    })
+                    }
+                    # Only include id if explicitly provided (let DB auto-generate otherwise)
+                    if article.get("id") is not None:
+                        data["id"] = article["id"]
+                    batch_data.append(data)
                 
                 # STEP 3: Insert with ON CONFLICT DO NOTHING + rate-limit protection
                 retry_count = 0

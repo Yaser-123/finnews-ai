@@ -154,3 +154,168 @@ async def get_symbols() -> Dict[str, Any]:
             status_code=500,
             detail=f"Error retrieving supported symbols: {str(e)}"
         )
+
+
+class RiskMonitorResponse(BaseModel):
+    """Risk monitoring response model."""
+    sector: str = Field(..., description="Sector being monitored")
+    risk_level: str = Field(..., description="Overall risk level: low, medium, high, critical")
+    negative_count: int = Field(..., description="Number of negative articles")
+    avg_sentiment_score: float = Field(..., description="Average negative sentiment score")
+    high_risk_companies: List[Dict[str, Any]] = Field(..., description="Companies with multiple negative mentions")
+    recent_alerts: List[Dict[str, Any]] = Field(..., description="Recent negative news articles")
+    updated_at: str = Field(..., description="Timestamp of analysis")
+
+
+@router.get(
+    "/risk-monitor",
+    response_model=RiskMonitorResponse,
+    summary="Monitor Sector Risk",
+    description="Track negative sentiment and risk indicators for a specific sector.",
+    tags=["Analysis"]
+)
+async def risk_monitor(
+    sector: str = Query("Banking", description="Sector to monitor (e.g., Banking, Technology, Finance)"),
+    days_back: int = Query(30, ge=1, le=180, description="Days to look back"),
+    min_sentiment: float = Query(0.7, ge=0.5, le=1.0, description="Minimum negative sentiment score")
+) -> RiskMonitorResponse:
+    """
+    Monitor risk indicators for a specific sector.
+    
+    **Process:**
+    1. Find all negative sentiment articles for the sector
+    2. Calculate risk metrics and scores
+    3. Identify high-risk companies
+    4. Return actionable risk alerts
+    
+    **Risk Levels:**
+    - **low**: < 5 negative articles
+    - **medium**: 5-15 negative articles
+    - **high**: 16-30 negative articles
+    - **critical**: > 30 negative articles
+    
+    **Example Usage:**
+    ```
+    GET /analysis/risk-monitor?sector=Banking&days_back=30
+    ```
+    """
+    try:
+        from database import db
+        from sqlalchemy import text
+        
+        # Initialize database
+        db.init_db()
+        session = await db.get_session()
+        
+        # Query negative articles - since sectors array is often empty,
+        # we search in the article text as fallback
+        query = text(f"""
+            SELECT 
+                a.id,
+                a.text,
+                a.published_at,
+                s.score as sentiment_score,
+                e.companies,
+                e.sectors
+            FROM articles a
+            JOIN sentiment s ON a.id = s.article_id
+            JOIN entities e ON a.id = e.article_id
+            WHERE s.label = 'negative'
+              AND s.score >= :min_sentiment
+              AND a.published_at >= NOW() - INTERVAL '{days_back} days'
+              AND (
+                  :sector = ANY(e.sectors) OR
+                  a.text ILIKE '%' || :sector || '%'
+              )
+            ORDER BY s.score DESC, a.published_at DESC
+            LIMIT 100
+        """)
+        
+        result = await session.execute(
+            query,
+            {
+                "min_sentiment": min_sentiment,
+                "sector": sector
+            }
+        )
+        rows = result.fetchall()
+        
+        # Process results
+        negative_count = len(rows)
+        
+        if negative_count == 0:
+            return RiskMonitorResponse(
+                sector=sector,
+                risk_level="low",
+                negative_count=0,
+                avg_sentiment_score=0.0,
+                high_risk_companies=[],
+                recent_alerts=[],
+                updated_at=datetime.now().isoformat()
+            )
+        
+        # Calculate average sentiment score
+        avg_score = sum(row.sentiment_score for row in rows) / len(rows)
+        
+        # Count company mentions
+        company_risks = {}
+        for row in rows:
+            if row.companies:
+                for company in row.companies:
+                    if company not in company_risks:
+                        company_risks[company] = {
+                            "company": company,
+                            "negative_count": 0,
+                            "avg_score": 0.0,
+                            "scores": []
+                        }
+                    company_risks[company]["negative_count"] += 1
+                    company_risks[company]["scores"].append(row.sentiment_score)
+        
+        # Calculate company risk scores and sort
+        high_risk_companies = []
+        for company, data in company_risks.items():
+            data["avg_score"] = sum(data["scores"]) / len(data["scores"])
+            data.pop("scores")  # Remove raw scores
+            if data["negative_count"] >= 2:  # At least 2 negative mentions
+                high_risk_companies.append(data)
+        
+        high_risk_companies.sort(key=lambda x: (x["negative_count"], x["avg_score"]), reverse=True)
+        high_risk_companies = high_risk_companies[:10]  # Top 10
+        
+        # Recent alerts (top 20)
+        recent_alerts = []
+        for row in rows[:20]:
+            recent_alerts.append({
+                "article_id": row.id,
+                "text": row.text[:200] + "..." if len(row.text) > 200 else row.text,
+                "published_at": row.published_at.isoformat(),
+                "sentiment_score": round(row.sentiment_score, 3),
+                "companies": row.companies[:3] if row.companies else []
+            })
+        
+        # Determine risk level
+        if negative_count < 5:
+            risk_level = "low"
+        elif negative_count < 16:
+            risk_level = "medium"
+        elif negative_count < 31:
+            risk_level = "high"
+        else:
+            risk_level = "critical"
+        
+        return RiskMonitorResponse(
+            sector=sector,
+            risk_level=risk_level,
+            negative_count=negative_count,
+            avg_sentiment_score=round(avg_score, 3),
+            high_risk_companies=high_risk_companies,
+            recent_alerts=recent_alerts,
+            updated_at=datetime.now().isoformat()
+        )
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error monitoring sector risk: {str(e)}"
+        )
