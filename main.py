@@ -33,13 +33,8 @@ async def lifespan(app: FastAPI):
         print(f"⚠️ Database initialization failed: {str(e)}")
         print("   App will continue without database persistence")
     
-    # Startup: Initialize scheduler (non-blocking)
-    try:
-        print("⏰ Initializing scheduler...")
-        init_scheduler()
-        print("✅ Scheduler initialized")
-    except Exception as e:
-        print(f"⚠️ Scheduler initialization failed: {str(e)}")
+    # Skip scheduler on startup - user can enable via API if needed
+    print("⏭️  Skipping scheduler on startup (enable via /scheduler/start API)")
     
     print("✅ FinNews AI started successfully!")
     
