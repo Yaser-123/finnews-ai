@@ -50,14 +50,15 @@ print("✅ FastAPI app created - Uvicorn will bind port now!\n")
 
 # Track if routers are loaded
 _routers_loaded = False
+_loading_started = False
 
-async def load_routers_once():
-    """Load routers on first request"""
+def load_routers_sync():
+    """Load routers synchronously in background thread"""
     global _routers_loaded
     if _routers_loaded:
         return
     
-    print("📦 First request - loading routers now...")
+    print("📦 Background thread - loading routers now...")
     try:
         from api.routes.pipeline import router as pipeline_router
         from api.scheduler import router as scheduler_router
@@ -77,20 +78,44 @@ async def load_routers_once():
         import traceback
         traceback.print_exc()
 
+def trigger_router_loading():
+    """Trigger router loading in background thread (non-blocking)"""
+    global _loading_started
+    if _loading_started:
+        return
+    _loading_started = True
+    
+    import threading
+    thread = threading.Thread(target=load_routers_sync, daemon=True)
+    thread.start()
+    print("🔄 Started background router loading...")
+
 @app.get("/")
-async def root():
+def root():
     """Serve the dashboard HTML"""
-    await load_routers_once()
+    # Trigger router loading in background (non-blocking)
+    trigger_router_loading()
     dashboard_path = os.path.join(os.path.dirname(__file__), "dashboard.html")
     return FileResponse(dashboard_path)
 
 @app.get("/health")
 def health():
     """Health check - always available, triggers router loading"""
+    # Trigger router loading in background on first health check
+    trigger_router_loading()
     return {
         "status": "ok",
         "service": "finnews-ai",
-        "version": "0.1"
+        "version": "0.1",
+        "routers_loaded": _routers_loaded
+    }
+
+@app.get("/api/loading-status")
+def loading_status():
+    """Check if routers are loaded"""
+    return {
+        "routers_loaded": _routers_loaded,
+        "message": "Routers loading in background..." if not _routers_loaded else "All routers loaded!"
     }
 
 @app.post("/run_graph")

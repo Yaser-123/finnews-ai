@@ -609,6 +609,27 @@
         const entityTags = document.getElementById('entityTags');
         const resultsCount = document.getElementById('resultsCount');
         const statsGrid = document.getElementById('statsGrid');
+        
+        // Check if backend is ready
+        async function checkBackendReady() {
+            try {
+                const response = await fetch(`${API_BASE}/api/loading-status`);
+                const data = await response.json();
+                if (!data.routers_loaded) {
+                    console.log('Backend still loading routers...');
+                    setTimeout(checkBackendReady, 2000);
+                } else {
+                    console.log('Backend ready!');
+                    loadDashboardStats();
+                }
+            } catch (error) {
+                console.log('Waiting for backend to start...');
+                setTimeout(checkBackendReady, 2000);
+            }
+        }
+        
+        // Start checking backend status
+        checkBackendReady();
 
         // Example queries
         document.querySelectorAll('.example-chip').forEach(chip => {
