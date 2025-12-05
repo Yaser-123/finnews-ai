@@ -18,24 +18,30 @@ async def lifespan(app: FastAPI):
     Lifecycle manager for FastAPI app.
     Handles database initialization on startup and cleanup on shutdown.
     """
-    # Startup: Initialize database
+    print("🚀 Starting FinNews AI...")
+    
+    # Startup: Initialize database (non-blocking)
     try:
+        print("📊 Initializing database...")
         db.init_db()
-        await db.create_tables()
-        print("✅ Database initialized successfully")
+        print("✅ Database engine initialized")
         
-        # Run migrations automatically on startup
-        await db.run_migrations()
+        # Skip table creation and migrations on first startup to speed up
+        # They will run on first API call instead
+        print("⏭️  Skipping migrations on startup (will run on first request)")
     except Exception as e:
         print(f"⚠️ Database initialization failed: {str(e)}")
         print("   App will continue without database persistence")
     
-    # Startup: Initialize scheduler
+    # Startup: Initialize scheduler (non-blocking)
     try:
+        print("⏰ Initializing scheduler...")
         init_scheduler()
-        print("✅ Scheduler initialized successfully")
+        print("✅ Scheduler initialized")
     except Exception as e:
         print(f"⚠️ Scheduler initialization failed: {str(e)}")
+    
+    print("✅ FinNews AI started successfully!")
     
     yield
     
