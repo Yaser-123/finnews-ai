@@ -393,8 +393,8 @@ def build_pipeline_graph() -> StateGraph:
     # Add nodes
     graph.add_node("ingest", ingest_node)
     graph.add_node("dedup", dedup_node)
-    graph.add_node("entities", entity_node)
-    graph.add_node("sentiment", sentiment_node)
+    graph.add_node("extract_entities", entity_node)
+    graph.add_node("analyze_sentiment", sentiment_node)
     graph.add_node("llm", llm_node)
     graph.add_node("index", index_node)
     
@@ -403,9 +403,9 @@ def build_pipeline_graph() -> StateGraph:
     
     # Add edges (linear flow)
     graph.add_edge("ingest", "dedup")
-    graph.add_edge("dedup", "entities")
-    graph.add_edge("entities", "sentiment")
-    graph.add_edge("sentiment", "llm")
+    graph.add_edge("dedup", "extract_entities")
+    graph.add_edge("extract_entities", "analyze_sentiment")
+    graph.add_edge("analyze_sentiment", "llm")
     graph.add_edge("llm", "index")
     graph.add_edge("index", END)
     
