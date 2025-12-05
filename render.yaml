@@ -1,0 +1,34 @@
+# Render.com Deployment Configuration
+
+services:
+  # Web Service (FastAPI)
+  - type: web
+    name: finnews-ai
+    env: python
+    region: singapore  # or oregon for US
+    plan: free
+    buildCommand: "./build.sh"
+    startCommand: "uvicorn main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: GEMINI_API_KEY
+        sync: false  # Set manually in Render dashboard
+      - key: DATABASE_URL
+        fromDatabase:
+          name: finnews-db
+          property: connectionString
+      - key: CHROMA_PERSIST_DIR
+        value: /opt/render/project/src/chroma_data
+      - key: SCHEDULER_ENABLED
+        value: true
+      - key: FETCH_INTERVAL_MINUTES
+        value: 5
+
+# PostgreSQL Database
+databases:
+  - name: finnews-db
+    databaseName: finnews
+    user: finnews_user
+    plan: free
+    region: singapore  # Match web service region
