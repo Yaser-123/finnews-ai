@@ -3,6 +3,9 @@
 
 set -o errexit
 
+echo "Python version check:"
+python --version
+
 # Install system dependencies needed for spaCy
 apt-get update && apt-get install -y gcc g++ build-essential
 
