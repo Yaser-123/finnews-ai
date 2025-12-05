@@ -4,6 +4,10 @@ from contextlib import asynccontextmanager
 import os
 import sys
 
+# Configure matplotlib to avoid font cache building at startup
+os.environ['MPLCONFIGDIR'] = '/tmp/matplotlib'
+os.environ['MPLBACKEND'] = 'Agg'
+
 # Print startup diagnostic
 print("=" * 60)
 print("🚀 FinNews AI - Initializing FastAPI (port binding first)...")
@@ -19,19 +23,23 @@ async def lifespan(app: FastAPI):
     
     # Import and register routers AFTER port is bound
     try:
-        print("📦 Loading routers (this may take 30-60 seconds)...")
+        print("📦 Loading essential routers (fast)...")
         from api.routes.pipeline import router as pipeline_router
         from api.scheduler import router as scheduler_router
         from api.routes.stats import router as stats_router
         from api.routes.llm import router as llm_router
-        from api.routes.analysis import router as analysis_router
         
         app.include_router(pipeline_router, prefix="/pipeline", tags=["Pipeline"])
         app.include_router(scheduler_router, prefix="/scheduler", tags=["Scheduler"])
         app.include_router(stats_router, tags=["Dashboard"])
         app.include_router(llm_router, prefix="/llm", tags=["LLM"])
+        print("✅ Essential routers loaded!")
+        
+        # Load analysis router in background (it imports matplotlib which is slow)
+        print("📊 Loading analysis router (matplotlib takes ~30s)...")
+        from api.routes.analysis import router as analysis_router
         app.include_router(analysis_router, prefix="/analysis", tags=["Analysis"])
-        print("✅ All routers loaded and registered!")
+        print("✅ All routers loaded!")
     except Exception as e:
         print(f"⚠️ Router loading error: {e}")
         import traceback
