@@ -16,35 +16,10 @@ print("=" * 60)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
-    Lifecycle manager - runs AFTER port binding.
-    All heavy initialization happens here, not at import time.
+    Lifecycle manager - MUST be empty for instant port binding.
+    Routers will be loaded on first request.
     """
-    print("\n✅ PORT BOUND - Now loading routers and heavy modules...")
-    
-    # Import and register routers AFTER port is bound
-    try:
-        print("📦 Loading essential routers (fast)...")
-        from api.routes.pipeline import router as pipeline_router
-        from api.scheduler import router as scheduler_router
-        from api.routes.stats import router as stats_router
-        from api.routes.llm import router as llm_router
-        
-        app.include_router(pipeline_router, prefix="/pipeline", tags=["Pipeline"])
-        app.include_router(scheduler_router, prefix="/scheduler", tags=["Scheduler"])
-        app.include_router(stats_router, tags=["Dashboard"])
-        app.include_router(llm_router, prefix="/llm", tags=["LLM"])
-        print("✅ Essential routers loaded!")
-        
-        # Load analysis router in background (it imports matplotlib which is slow)
-        print("📊 Loading analysis router (matplotlib takes ~30s)...")
-        from api.routes.analysis import router as analysis_router
-        app.include_router(analysis_router, prefix="/analysis", tags=["Analysis"])
-        print("✅ All routers loaded!")
-    except Exception as e:
-        print(f"⚠️ Router loading error: {e}")
-        import traceback
-        traceback.print_exc()
-    
+    print("\n✅ Lifespan started - port will bind now!")
     yield
     
     # Shutdown cleanup
@@ -73,14 +48,45 @@ app = FastAPI(
 )
 print("✅ FastAPI app created - Uvicorn will bind port now!\n")
 
+# Track if routers are loaded
+_routers_loaded = False
+
+async def load_routers_once():
+    """Load routers on first request"""
+    global _routers_loaded
+    if _routers_loaded:
+        return
+    
+    print("📦 First request - loading routers now...")
+    try:
+        from api.routes.pipeline import router as pipeline_router
+        from api.scheduler import router as scheduler_router
+        from api.routes.stats import router as stats_router
+        from api.routes.llm import router as llm_router
+        from api.routes.analysis import router as analysis_router
+        
+        app.include_router(pipeline_router, prefix="/pipeline", tags=["Pipeline"])
+        app.include_router(scheduler_router, prefix="/scheduler", tags=["Scheduler"])
+        app.include_router(stats_router, tags=["Dashboard"])
+        app.include_router(llm_router, prefix="/llm", tags=["LLM"])
+        app.include_router(analysis_router, prefix="/analysis", tags=["Analysis"])
+        _routers_loaded = True
+        print("✅ All routers loaded!")
+    except Exception as e:
+        print(f"⚠️ Router loading error: {e}")
+        import traceback
+        traceback.print_exc()
+
 @app.get("/")
-def root():
+async def root():
     """Serve the dashboard HTML"""
+    await load_routers_once()
     dashboard_path = os.path.join(os.path.dirname(__file__), "dashboard.html")
     return FileResponse(dashboard_path)
 
 @app.get("/health")
 def health():
+    """Health check - always available, triggers router loading"""
     return {
         "status": "ok",
         "service": "finnews-ai",
