@@ -15,10 +15,27 @@ async def lifespan(app: FastAPI):
     Lifecycle manager - runs AFTER port binding.
     All heavy initialization happens here, not at import time.
     """
-    print("\n✅ PORT BOUND - Now running startup tasks...")
+    print("\n✅ PORT BOUND - Now loading routers and heavy modules...")
     
-    # Import heavy modules AFTER port is bound
-    print("📦 Lazy-loading modules...")
+    # Import and register routers AFTER port is bound
+    try:
+        print("📦 Loading routers (this may take 30-60 seconds)...")
+        from api.routes.pipeline import router as pipeline_router
+        from api.scheduler import router as scheduler_router
+        from api.routes.stats import router as stats_router
+        from api.routes.llm import router as llm_router
+        from api.routes.analysis import router as analysis_router
+        
+        app.include_router(pipeline_router, prefix="/pipeline", tags=["Pipeline"])
+        app.include_router(scheduler_router, prefix="/scheduler", tags=["Scheduler"])
+        app.include_router(stats_router, tags=["Dashboard"])
+        app.include_router(llm_router, prefix="/llm", tags=["LLM"])
+        app.include_router(analysis_router, prefix="/analysis", tags=["Analysis"])
+        print("✅ All routers loaded and registered!")
+    except Exception as e:
+        print(f"⚠️ Router loading error: {e}")
+        import traceback
+        traceback.print_exc()
     
     yield
     
@@ -46,26 +63,7 @@ app = FastAPI(
     version="0.2.0",
     lifespan=lifespan
 )
-print("✅ FastAPI app created - port will bind now!\n")
-
-# Lazy-load routers (only import when first accessed)
-print("📌 Registering routers (lazy-loaded)...")
-try:
-    from api.routes.pipeline import router as pipeline_router
-    from api.scheduler import router as scheduler_router  # scheduler is in api.scheduler, not api.routes
-    from api.routes.stats import router as stats_router
-    from api.routes.llm import router as llm_router
-    from api.routes.analysis import router as analysis_router
-    
-    app.include_router(pipeline_router, prefix="/pipeline", tags=["Pipeline"])
-    app.include_router(scheduler_router, prefix="/scheduler", tags=["Scheduler"])
-    app.include_router(stats_router, tags=["Dashboard"])
-    app.include_router(llm_router, prefix="/llm", tags=["LLM"])
-    app.include_router(analysis_router, prefix="/analysis", tags=["Analysis"])
-    print("✅ All routers registered\n")
-except Exception as e:
-    print(f"⚠️ Router registration error: {e}")
-    print("   App will start with limited functionality\n")
+print("✅ FastAPI app created - Uvicorn will bind port now!\n")
 
 @app.get("/")
 def root():
@@ -108,4 +106,5 @@ async def alerts_socket(websocket: WebSocket):
         alert_manager.disconnect(websocket)
 
 if __name__ == "__main__":
+    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
