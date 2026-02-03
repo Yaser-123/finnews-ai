@@ -17,31 +17,10 @@ print("=" * 60)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
-    Lifecycle manager - loads routers AFTER port binding.
-    This prevents Render timeout by allowing uvicorn to bind first.
+    Lifecycle manager - kept minimal for fastest port binding.
+    Routers are loaded on-demand when first route is called.
     """
-    print("\n✅ Lifespan started - port will bind now!")
-    
-    # Load routers AFTER port is bound and detected by Render
-    print("📦 Loading routers (post-binding)...")
-    try:
-        from api.routes.pipeline import router as pipeline_router
-        from api.scheduler import router as scheduler_router
-        from api.routes.stats import router as stats_router
-        from api.routes.llm import router as llm_router
-        from api.routes.analysis import router as analysis_router
-        
-        app.include_router(pipeline_router, prefix="/pipeline", tags=["Pipeline"])
-        app.include_router(scheduler_router, prefix="/scheduler", tags=["Scheduler"])
-        app.include_router(stats_router, tags=["Dashboard"])
-        app.include_router(llm_router, prefix="/llm", tags=["LLM"])
-        app.include_router(analysis_router, prefix="/analysis", tags=["Analysis"])
-        print("✅ All routers loaded!\n")
-    except Exception as e:
-        print(f"⚠️ Router loading error: {e}")
-        import traceback
-        traceback.print_exc()
-    
+    print("\n✅ Lifespan started - port binding in progress...")
     yield
     
     # Shutdown cleanup
@@ -70,11 +49,45 @@ app = FastAPI(
 )
 print("✅ FastAPI app created!\n")
 
-# CRITICAL: DO NOT import routers at module level on Render
-# Heavy ML model imports will block port binding and cause timeout
-# Routers are loaded on first request via on_event("startup")
-print("⚡ Skipping router imports - will lazy-load after port binding")
-print("🎯 This allows Render to detect the open port within timeout window\n")
+# CRITICAL: Routers are loaded on-demand to prevent Render timeout
+# This flag tracks whether routers have been initialized
+_routers_loaded = False
+
+def load_routers_once():
+    """Load routers on first request (lazy initialization)."""
+    global _routers_loaded
+    if _routers_loaded:
+        return
+    
+    print("📦 Loading routers (on-demand)...")
+    try:
+        from api.routes.pipeline import router as pipeline_router
+        from api.scheduler import router as scheduler_router
+        from api.routes.stats import router as stats_router
+        from api.routes.llm import router as llm_router
+        from api.routes.analysis import router as analysis_router
+        
+        app.include_router(pipeline_router, prefix="/pipeline", tags=["Pipeline"])
+        app.include_router(scheduler_router, prefix="/scheduler", tags=["Scheduler"])
+        app.include_router(stats_router, tags=["Dashboard"])
+        app.include_router(llm_router, prefix="/llm", tags=["LLM"])
+        app.include_router(analysis_router, prefix="/analysis", tags=["Analysis"])
+        _routers_loaded = True
+        print("✅ All routers loaded!\n")
+    except Exception as e:
+        print(f"⚠️ Router loading error: {e}")
+        import traceback
+        traceback.print_exc()
+
+# Middleware to lazy-load routers on first request
+@app.middleware("http")
+async def lazy_load_middleware(request, call_next):
+    load_routers_once()
+    response = await call_next(request)
+    return response
+
+print("⚡ Routers will lazy-load on first request")
+print("🎯 This allows Render to detect open port immediately\n")
 
 @app.get("/")
 def root():
