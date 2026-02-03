@@ -46,76 +46,41 @@ app = FastAPI(
     version="0.2.0",
     lifespan=lifespan
 )
-print("✅ FastAPI app created - Uvicorn will bind port now!\n")
+print("✅ FastAPI app created!\n")
 
-# Track if routers are loaded
-_routers_loaded = False
-_loading_started = False
-
-def load_routers_sync():
-    """Load routers synchronously in background thread"""
-    global _routers_loaded
-    if _routers_loaded:
-        return
+# Load all routers immediately for localhost development
+print("📦 Loading routers...")
+try:
+    from api.routes.pipeline import router as pipeline_router
+    from api.scheduler import router as scheduler_router
+    from api.routes.stats import router as stats_router
+    from api.routes.llm import router as llm_router
+    from api.routes.analysis import router as analysis_router
     
-    print("📦 Background thread - loading routers now...")
-    try:
-        from api.routes.pipeline import router as pipeline_router
-        from api.scheduler import router as scheduler_router
-        from api.routes.stats import router as stats_router
-        from api.routes.llm import router as llm_router
-        from api.routes.analysis import router as analysis_router
-        
-        app.include_router(pipeline_router, prefix="/pipeline", tags=["Pipeline"])
-        app.include_router(scheduler_router, prefix="/scheduler", tags=["Scheduler"])
-        app.include_router(stats_router, tags=["Dashboard"])
-        app.include_router(llm_router, prefix="/llm", tags=["LLM"])
-        app.include_router(analysis_router, prefix="/analysis", tags=["Analysis"])
-        _routers_loaded = True
-        print("✅ All routers loaded!")
-    except Exception as e:
-        print(f"⚠️ Router loading error: {e}")
-        import traceback
-        traceback.print_exc()
-
-def trigger_router_loading():
-    """Trigger router loading in background thread (non-blocking)"""
-    global _loading_started
-    if _loading_started:
-        return
-    _loading_started = True
-    
-    import threading
-    thread = threading.Thread(target=load_routers_sync, daemon=True)
-    thread.start()
-    print("🔄 Started background router loading...")
+    app.include_router(pipeline_router, prefix="/pipeline", tags=["Pipeline"])
+    app.include_router(scheduler_router, prefix="/scheduler", tags=["Scheduler"])
+    app.include_router(stats_router, tags=["Dashboard"])
+    app.include_router(llm_router, prefix="/llm", tags=["LLM"])
+    app.include_router(analysis_router, prefix="/analysis", tags=["Analysis"])
+    print("✅ All routers loaded!\n")
+except Exception as e:
+    print(f"⚠️ Router loading error: {e}")
+    import traceback
+    traceback.print_exc()
 
 @app.get("/")
 def root():
     """Serve the dashboard HTML"""
-    # Trigger router loading in background (non-blocking)
-    trigger_router_loading()
     dashboard_path = os.path.join(os.path.dirname(__file__), "dashboard.html")
     return FileResponse(dashboard_path)
 
 @app.get("/health")
 def health():
-    """Health check - always available, triggers router loading"""
-    # Trigger router loading in background on first health check
-    trigger_router_loading()
+    """Health check - always available"""
     return {
         "status": "ok",
         "service": "finnews-ai",
-        "version": "0.1",
-        "routers_loaded": _routers_loaded
-    }
-
-@app.get("/api/loading-status")
-def loading_status():
-    """Check if routers are loaded"""
-    return {
-        "routers_loaded": _routers_loaded,
-        "message": "Routers loading in background..." if not _routers_loaded else "All routers loaded!"
+        "version": "0.2.0"
     }
 
 @app.post("/run_graph")
