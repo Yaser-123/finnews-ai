@@ -79,30 +79,33 @@ def load_routers_once():
         import traceback
         traceback.print_exc()
 
-# Middleware to lazy-load routers on first request
-@app.middleware("http")
-async def lazy_load_middleware(request, call_next):
-    load_routers_once()
-    response = await call_next(request)
-    return response
-
 print("⚡ Routers will lazy-load on first request")
 print("🎯 This allows Render to detect open port immediately\n")
+
+# CRITICAL: Define /health BEFORE middleware to avoid router loading on health checks
+@app.get("/health")
+def health():
+    """Health check - always available without loading routers"""
+    return {
+        "status": "ok",
+        "service": "finnews-ai",
+        "version": "0.2.0"
+    }
+
+# Middleware to lazy-load routers on first non-health request
+@app.middleware("http")
+async def lazy_load_middleware(request, call_next):
+    # Skip router loading for health check endpoint
+    if request.url.path != "/health":
+        load_routers_once()
+    response = await call_next(request)
+    return response
 
 @app.get("/")
 def root():
     """Serve the dashboard HTML"""
     dashboard_path = os.path.join(os.path.dirname(__file__), "dashboard.html")
     return FileResponse(dashboard_path)
-
-@app.get("/health")
-def health():
-    """Health check - always available"""
-    return {
-        "status": "ok",
-        "service": "finnews-ai",
-        "version": "0.2.0"
-    }
 
 @app.post("/run_graph")
 def run_graph():
