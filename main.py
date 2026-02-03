@@ -11,15 +11,37 @@ os.environ['MPLBACKEND'] = 'Agg'
 # Print startup diagnostic
 print("=" * 60)
 print("🚀 FinNews AI - Initializing FastAPI (port binding first)...")
+print(f"🔌 PORT environment variable: {os.getenv('PORT', 'NOT SET')}")
 print("=" * 60)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
-    Lifecycle manager - MUST be empty for instant port binding.
-    Routers will be loaded on first request.
+    Lifecycle manager - loads routers AFTER port binding.
+    This prevents Render timeout by allowing uvicorn to bind first.
     """
     print("\n✅ Lifespan started - port will bind now!")
+    
+    # Load routers AFTER port is bound and detected by Render
+    print("📦 Loading routers (post-binding)...")
+    try:
+        from api.routes.pipeline import router as pipeline_router
+        from api.scheduler import router as scheduler_router
+        from api.routes.stats import router as stats_router
+        from api.routes.llm import router as llm_router
+        from api.routes.analysis import router as analysis_router
+        
+        app.include_router(pipeline_router, prefix="/pipeline", tags=["Pipeline"])
+        app.include_router(scheduler_router, prefix="/scheduler", tags=["Scheduler"])
+        app.include_router(stats_router, tags=["Dashboard"])
+        app.include_router(llm_router, prefix="/llm", tags=["LLM"])
+        app.include_router(analysis_router, prefix="/analysis", tags=["Analysis"])
+        print("✅ All routers loaded!\n")
+    except Exception as e:
+        print(f"⚠️ Router loading error: {e}")
+        import traceback
+        traceback.print_exc()
+    
     yield
     
     # Shutdown cleanup
@@ -48,25 +70,11 @@ app = FastAPI(
 )
 print("✅ FastAPI app created!\n")
 
-# Load all routers immediately for localhost development
-print("📦 Loading routers...")
-try:
-    from api.routes.pipeline import router as pipeline_router
-    from api.scheduler import router as scheduler_router
-    from api.routes.stats import router as stats_router
-    from api.routes.llm import router as llm_router
-    from api.routes.analysis import router as analysis_router
-    
-    app.include_router(pipeline_router, prefix="/pipeline", tags=["Pipeline"])
-    app.include_router(scheduler_router, prefix="/scheduler", tags=["Scheduler"])
-    app.include_router(stats_router, tags=["Dashboard"])
-    app.include_router(llm_router, prefix="/llm", tags=["LLM"])
-    app.include_router(analysis_router, prefix="/analysis", tags=["Analysis"])
-    print("✅ All routers loaded!\n")
-except Exception as e:
-    print(f"⚠️ Router loading error: {e}")
-    import traceback
-    traceback.print_exc()
+# CRITICAL: DO NOT import routers at module level on Render
+# Heavy ML model imports will block port binding and cause timeout
+# Routers are loaded on first request via on_event("startup")
+print("⚡ Skipping router imports - will lazy-load after port binding")
+print("🎯 This allows Render to detect the open port within timeout window\n")
 
 @app.get("/")
 def root():

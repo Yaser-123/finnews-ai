@@ -17,6 +17,10 @@ pip install -r requirements-render.txt
 # Download spaCy model
 python -m spacy download en_core_web_sm
 
+# Pre-build matplotlib font cache to avoid slow first startup
+echo "Pre-building matplotlib font cache..."
+python -c "import matplotlib.pyplot as plt; import matplotlib.font_manager; print('Font cache built')" || echo "Font cache build failed (non-critical)"
+
 # Create necessary directories
 mkdir -p chroma_data logs
 

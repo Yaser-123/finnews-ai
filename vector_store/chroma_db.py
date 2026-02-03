@@ -12,8 +12,8 @@ from chromadb.config import Settings
 # Project root directory
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# Persistent ChromaDB storage path
-CHROMA_PATH = os.path.join(PROJECT_ROOT, "chroma_db")
+# Persistent ChromaDB storage path - prefer env var for Render deployments
+CHROMA_PATH = os.getenv("CHROMA_PERSIST_DIR", os.path.join(PROJECT_ROOT, "chroma_db"))
 
 # Standardized collection name used across all agents
 COLLECTION_NAME = "finnews_articles"

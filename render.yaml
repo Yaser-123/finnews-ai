@@ -20,8 +20,8 @@ services:
           property: connectionString
       - key: CHROMA_PERSIST_DIR
         value: /opt/render/project/src/chroma_data
-      - key: SCHEDULER_ENABLED
-        value: true
+      - key: AUTO_START_SCHEDULER
+        value: false
       - key: FETCH_INTERVAL_MINUTES
         value: 5
 
