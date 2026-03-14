@@ -30,6 +30,16 @@
 
 ---
 
+## LLM Usage
+
+The system uses Google Gemini for:
+
+• Query expansion to improve semantic search
+• Financial news summarization
+• Context-aware ranking of retrieved articles
+
+---
+
 ## 🏗️ System Architecture
 
 ```
